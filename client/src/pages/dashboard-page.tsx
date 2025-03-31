@@ -13,7 +13,7 @@ import AddTripModal from "@/components/modals/add-trip-modal";
 import ReceiptViewerModal from "@/components/modals/receipt-viewer-modal";
 
 export default function DashboardPage() {
-  const { toggleAddExpense, toggleAddTrip } = useModalStore();
+  const { toggleAddTrip } = useModalStore();
 
   // Fetch expenses
   const { data: expenses, isLoading: expensesLoading } = useQuery({
@@ -71,10 +71,6 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold mb-2 md:mb-0">Dashboard</h1>
           
           <div className="flex flex-wrap gap-2">
-            <Button className="bg-primary hover:bg-blue-600" onClick={toggleAddExpense}>
-              <PlusIcon className="h-4 w-4 mr-2" /> Add Expense
-            </Button>
-            
             <Button className="bg-secondary hover:bg-emerald-600" onClick={toggleAddTrip}>
               <PlusIcon className="h-4 w-4 mr-2" /> Add Trip
             </Button>
