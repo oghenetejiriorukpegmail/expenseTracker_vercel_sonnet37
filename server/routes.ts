@@ -319,15 +319,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const vendor = getExtractedValue('vendor');
       
+      // Structure data for our settings verification table
+      const dateValue = getExtractedValue('date');
+      const locationValue = getExtractedValue('location');
+      const typeValue = vendor ? guessExpenseType(result.text || '', vendor) : '';
+      const totalAmountValue = getCostValue();
+      
+      // Combined response with both the original extracted data and formatted data for form fields
       const formattedData = {
         ...result,
-        formData: result.success ? {
-          date: getExtractedValue('date'),
+        // Original extracted data passed through directly for table display
+        data: {
+          date: dateValue,
           vendor: vendor,
-          location: getExtractedValue('location'),
-          cost: getCostValue(),
-          type: guessExpenseType(result.text || '', vendor),
-          // Include additional data like items, payment method, etc.
+          location: locationValue,
+          type: typeValue,
+          total_amount: totalAmountValue,
+          items: getItemsArray(),
+        },
+        // Formatted data for form auto-fill (as before)
+        formData: result.success ? {
+          date: dateValue,
+          vendor: vendor,
+          location: locationValue,
+          cost: totalAmountValue,
+          type: typeValue,
           items: getItemsArray(),
           paymentMethod: getExtractedValue('paymentMethod'),
         } : {

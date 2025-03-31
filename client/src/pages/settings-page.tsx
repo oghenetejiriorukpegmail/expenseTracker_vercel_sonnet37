@@ -51,6 +51,14 @@ export default function SettingsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [verificationStatus, setVerificationStatus] = useState<"none" | "loading" | "success" | "error">("none");
   const [verificationMessage, setVerificationMessage] = useState("");
+  const [extractedData, setExtractedData] = useState<{
+    date?: string | null;
+    vendor?: string | null;
+    location?: string | null;
+    total_amount?: string | number | null;
+    type?: string | null;
+    items?: Array<{name: string; price: number}>;
+  }>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const form = useForm<z.infer<typeof ocrSettingsSchema>>({
@@ -142,6 +150,7 @@ export default function SettingsPage() {
     
     setVerificationStatus("loading");
     setVerificationMessage("Processing receipt...");
+    setExtractedData({}); // Clear previous data
     
     const formData = new FormData();
     formData.append("receipt", file);
@@ -155,8 +164,16 @@ export default function SettingsPage() {
       const data = await response.json();
       
       if (data.success) {
-        setVerificationStatus("success");
-        setVerificationMessage("Receipt processed successfully! Your OCR settings are working properly.");
+        // Extract structured data if available
+        if (data.data && Object.keys(data.data).length > 0) {
+          setExtractedData(data.data);
+          setVerificationStatus("success");
+          setVerificationMessage("Receipt processed successfully! See extracted data below.");
+        } else {
+          // Handle case where OCR worked but no structured data was extracted
+          setVerificationStatus("error");
+          setVerificationMessage("Receipt was processed, but no structured data could be extracted. Try another image or a different OCR method.");
+        }
       } else {
         setVerificationStatus("error");
         setVerificationMessage(data.error || "Failed to process receipt. Check your API key and try again.");
@@ -364,11 +381,73 @@ export default function SettingsPage() {
                           <p className="text-sm text-center text-green-500 font-medium">
                             {verificationMessage}
                           </p>
+                          
+                          {/* Extracted Data Table */}
+                          <div className="w-full mt-4 border rounded-md overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="bg-gray-100 dark:bg-gray-700">
+                                <tr>
+                                  <th className="px-4 py-2 text-left">Field</th>
+                                  <th className="px-4 py-2 text-left">Value</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y">
+                                <tr className="bg-white dark:bg-gray-800">
+                                  <td className="px-4 py-2 font-medium">Date</td>
+                                  <td className="px-4 py-2">{extractedData.date || "Not detected"}</td>
+                                </tr>
+                                <tr className="bg-white dark:bg-gray-800">
+                                  <td className="px-4 py-2 font-medium">Vendor</td>
+                                  <td className="px-4 py-2">{extractedData.vendor || "Not detected"}</td>
+                                </tr>
+                                <tr className="bg-white dark:bg-gray-800">
+                                  <td className="px-4 py-2 font-medium">Type</td>
+                                  <td className="px-4 py-2">{extractedData.type || "Not detected"}</td>
+                                </tr>
+                                <tr className="bg-white dark:bg-gray-800">
+                                  <td className="px-4 py-2 font-medium">Location</td>
+                                  <td className="px-4 py-2">{extractedData.location || "Not detected"}</td>
+                                </tr>
+                                <tr className="bg-white dark:bg-gray-800">
+                                  <td className="px-4 py-2 font-medium">Total Amount</td>
+                                  <td className="px-4 py-2">
+                                    {extractedData.total_amount 
+                                      ? typeof extractedData.total_amount === 'number' 
+                                        ? `$${extractedData.total_amount.toFixed(2)}` 
+                                        : extractedData.total_amount
+                                      : "Not detected"}
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                          
+                          {extractedData.items && extractedData.items.length > 0 && (
+                            <div className="w-full mt-4 border rounded-md overflow-hidden">
+                              <table className="w-full text-sm">
+                                <thead className="bg-gray-100 dark:bg-gray-700">
+                                  <tr>
+                                    <th className="px-4 py-2 text-left">Item</th>
+                                    <th className="px-4 py-2 text-right">Price</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                  {extractedData.items.map((item, index) => (
+                                    <tr key={index} className="bg-white dark:bg-gray-800">
+                                      <td className="px-4 py-2">{item.name}</td>
+                                      <td className="px-4 py-2 text-right">${item.price.toFixed(2)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                          
                           <Button 
                             type="button" 
                             variant="outline" 
                             onClick={triggerFileInput}
-                            className="mt-2"
+                            className="mt-4"
                           >
                             Try Another Receipt
                           </Button>
