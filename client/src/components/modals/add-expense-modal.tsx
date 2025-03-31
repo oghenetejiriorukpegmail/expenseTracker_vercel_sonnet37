@@ -154,7 +154,7 @@ export default function AddExpenseModal() {
           toast({
             title: "Receipt Processing Partial",
             description: "Some fields could not be extracted. Please fill them manually.",
-            variant: "warning",
+            variant: "destructive",
           });
         }
       } catch (error) {

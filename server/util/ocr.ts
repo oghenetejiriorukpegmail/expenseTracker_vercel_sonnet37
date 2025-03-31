@@ -9,20 +9,24 @@ async function extractTextFromPDF(filePath: string): Promise<string> {
   try {
     // Parse PDF and extract text using our custom parser
     const pdfData = await parsePDFFile(filePath);
-    return pdfData.text;
+    
+    // Clean up text (remove excessive whitespace, etc.)
+    let text = pdfData.text || "";
+    text = text.replace(/\s+/g, ' ').trim();
+    
+    console.log(`Extracted PDF text (first 200 chars): ${text.substring(0, 200)}...`);
+    
+    return text;
   } catch (error) {
     console.error("Error parsing PDF:", error);
     throw new Error("Failed to extract text from PDF. The file may be corrupted or password-protected.");
   }
 }
 
-// Convert PDF to image (stub - would need a full implementation)
-async function convertPDFToImage(filePath: string): Promise<string> {
-  // This is a simplified implementation
-  // In a production app, you would use a library like pdf-img-convert, pdf2pic, or pdf2image
-  // For now, we'll just extract text from the PDF and use that
-  const text = await extractTextFromPDF(filePath);
-  return text;
+// For some AI models like Gemini and OpenAI Vision, we need image data
+// This is a placeholder for getting binary data from the PDF or image
+async function getFileData(filePath: string): Promise<Buffer> {
+  return fs.readFileSync(filePath);
 }
 
 // Check file type
@@ -45,41 +49,67 @@ export async function processReceiptWithOCR(filePath: string, method: string = "
 
     // Check file type
     const fileType = getFileType(filePath);
+    console.log(`Processing receipt of type ${fileType} with ${method} OCR method`);
     
-    // If file is PDF and using an AI method, first extract text with pdf-parse
-    if (fileType === 'pdf' && method !== 'tesseract') {
-      // For AI methods, we'll extract text from the PDF and send that
+    // Process differently based on file type and OCR method
+    let result;
+    
+    // For PDFs
+    if (fileType === 'pdf') {
+      console.log(`PDF receipt detected, extracting text...`);
+      // Extract text content from PDF
       const pdfText = await extractTextFromPDF(filePath);
       
-      // Process the PDF text directly with the AI model
-      let result;
-      switch (method) {
-        case "openai":
-          result = await processOpenAIText(pdfText);
-          break;
-        case "gemini":
-          result = await processGeminiText(pdfText);
-          break;
-        case "claude":
-          result = await processClaudeText(pdfText);
-          break;
-        case "openrouter":
-          result = await processOpenRouterText(pdfText);
-          break;
-        default:
-          throw new Error(`Unsupported OCR method for PDF: ${method}`);
+      // Handle empty PDF text
+      if (!pdfText || pdfText.trim() === '') {
+        console.log('PDF text extraction yielded no text, will attempt vision-based processing');
+        
+        // Fall back to image-based methods if possible
+        if (method === 'gemini' || method === 'openai' || method === 'claude') {
+          // For models with vision capabilities, use file data directly
+          switch (method) {
+            case "gemini":
+              result = await processGemini(filePath);
+              break;
+            case "openai":
+              result = await processOpenAI(filePath);
+              break;
+            case "claude":
+              result = await processClaude(filePath);
+              break;
+            default:
+              throw new Error(`No text content found in PDF and no vision fallback for method: ${method}`);
+          }
+        } else {
+          throw new Error("PDF text extraction failed and selected OCR method doesn't support direct image processing");
+        }
+      } else {
+        // Process the extracted PDF text with the selected AI model
+        console.log(`Successfully extracted PDF text (${pdfText.length} chars), processing with ${method}...`);
+        switch (method) {
+          case "tesseract":
+            // Tesseract doesn't process text directly, so we'll just return the extracted PDF text
+            result = pdfText;
+            break;
+          case "openai":
+            result = await processOpenAIText(pdfText);
+            break;
+          case "gemini":
+            result = await processGeminiText(pdfText);
+            break;
+          case "claude":
+            result = await processClaudeText(pdfText);
+            break;
+          case "openrouter":
+            result = await processOpenRouterText(pdfText);
+            break;
+          default:
+            throw new Error(`Unsupported OCR method for PDF: ${method}`);
+        }
       }
-      
-      // Extract structured data from the OCR text
-      const extractedData = extractDataFromText(result);
-      return {
-        success: true,
-        text: result,
-        extractedData
-      };
     } else {
-      // For images or if using tesseract with PDFs
-      let result;
+      // For image files, use the direct vision-based methods
+      console.log(`Image receipt detected, processing with ${method}...`);
       switch (method) {
         case "tesseract":
           result = await processTesseract(filePath);
@@ -99,13 +129,30 @@ export async function processReceiptWithOCR(filePath: string, method: string = "
         default:
           throw new Error(`Unsupported OCR method: ${method}`);
       }
-      
+    }
+    
+    // Try to extract structured data from the OCR result
+    // Log a sample of the result for debugging
+    console.log(`OCR result (first 100 chars): ${result.substring(0, 100)}...`);
+    
+    try {
       // Extract structured data from the OCR text
       const extractedData = extractDataFromText(result);
+      console.log("Successfully extracted structured data:", extractedData);
+      
       return {
         success: true,
         text: result,
         extractedData
+      };
+    } catch (dataError) {
+      console.error("Error extracting structured data:", dataError);
+      // Return partial success - text was extracted but structured data failed
+      return {
+        success: true,
+        text: result,
+        extractedData: {}, // Empty data
+        extractionError: dataError instanceof Error ? dataError.message : "Failed to extract structured data"
       };
     }
   } catch (error) {
@@ -514,50 +561,133 @@ async function processOpenRouter(filePath: string) {
 function extractDataFromText(text: string) {
   const data: Record<string, any> = {};
   
+  console.log("Extracting data from OCR text...");
+  
   // Try to extract JSON from the AI response
   try {
-    const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```|(\{[\s\S]*\})/);
-    if (jsonMatch) {
-      const jsonStr = jsonMatch[1] || jsonMatch[2];
-      const parsedData = JSON.parse(jsonStr.trim());
+    // Look for JSON in code blocks first
+    let jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    
+    // If no code block match, look for any JSON-like structure
+    if (!jsonMatch) {
+      jsonMatch = text.match(/(\{[\s\S]*?\})/g);
       
-      // Map the AI-extracted fields to our data structure
-      if (parsedData.date) {
-        data.date = parsedData.date;
-      }
-      
-      if (parsedData.vendor) {
-        data.vendor = parsedData.vendor;
-      }
-      
-      if (parsedData.location) {
-        data.location = parsedData.location;
-      }
-      
-      if (parsedData.total) {
-        // Handle total amount with or without currency symbol
-        const totalStr = parsedData.total.toString();
-        const totalMatch = totalStr.match(/\$?([0-9]+\.?[0-9]*)/);
-        if (totalMatch) {
-          data.total = parseFloat(totalMatch[1]);
+      // If we have multiple matches, find the largest one (likely the most complete)
+      if (jsonMatch && jsonMatch.length > 1) {
+        let largestMatch = '';
+        for (const match of jsonMatch) {
+          if (match.length > largestMatch.length) {
+            largestMatch = match;
+          }
         }
-      }
-      
-      if (parsedData.items && Array.isArray(parsedData.items)) {
-        data.items = parsedData.items;
-      }
-      
-      if (parsedData.paymentMethod) {
-        data.paymentMethod = parsedData.paymentMethod;
-      }
-      
-      // If we successfully parsed JSON, return the data
-      if (Object.keys(data).length > 0) {
-        return data;
+        jsonMatch = [largestMatch, largestMatch];
       }
     }
+    
+    if (jsonMatch) {
+      const jsonStr = jsonMatch[1] || jsonMatch[0];
+      console.log("Found JSON structure:", jsonStr.substring(0, 100) + (jsonStr.length > 100 ? "..." : ""));
+      
+      try {
+        const parsedData = JSON.parse(jsonStr.trim());
+        console.log("Successfully parsed JSON data");
+        
+        // Map the AI-extracted fields to our data structure
+        // Handle various field name formats (camelCase, lowercase, with spaces, etc.)
+        
+        // Process date
+        if (parsedData.date) {
+          data.date = parsedData.date;
+        } else if (parsedData.Date) {
+          data.date = parsedData.Date;
+        }
+        
+        // Process vendor/business name
+        if (parsedData.vendor) {
+          data.vendor = parsedData.vendor;
+        } else if (parsedData.Vendor) {
+          data.vendor = parsedData.Vendor;
+        } else if (parsedData.business || parsedData.Business) {
+          data.vendor = parsedData.business || parsedData.Business;
+        } else if (parsedData.businessName || parsedData.BusinessName) {
+          data.vendor = parsedData.businessName || parsedData.BusinessName;
+        } else if (parsedData.merchant || parsedData.Merchant) {
+          data.vendor = parsedData.merchant || parsedData.Merchant;
+        }
+        
+        // Process location
+        if (parsedData.location) {
+          data.location = parsedData.location;
+        } else if (parsedData.Location) {
+          data.location = parsedData.Location;
+        } else if (parsedData.address || parsedData.Address) {
+          data.location = parsedData.address || parsedData.Address;
+        }
+        
+        // Process total amount
+        if (parsedData.total !== undefined) {
+          // Handle total amount with or without currency symbol
+          const totalStr = parsedData.total.toString();
+          const totalMatch = totalStr.match(/\$?([0-9]+\.?[0-9]*)/);
+          if (totalMatch) {
+            data.total = parseFloat(totalMatch[1]);
+          } else {
+            data.total = parsedData.total;
+          }
+        } else if (parsedData.Total !== undefined) {
+          const totalStr = parsedData.Total.toString();
+          const totalMatch = totalStr.match(/\$?([0-9]+\.?[0-9]*)/);
+          if (totalMatch) {
+            data.total = parseFloat(totalMatch[1]);
+          } else {
+            data.total = parsedData.Total;
+          }
+        } else if (parsedData.amount !== undefined || parsedData.Amount !== undefined) {
+          const amount = parsedData.amount !== undefined ? parsedData.amount : parsedData.Amount;
+          const amountStr = amount.toString();
+          const amountMatch = amountStr.match(/\$?([0-9]+\.?[0-9]*)/);
+          if (amountMatch) {
+            data.total = parseFloat(amountMatch[1]);
+          } else {
+            data.total = amount;
+          }
+        }
+        
+        // Process items list
+        if (parsedData.items && Array.isArray(parsedData.items)) {
+          data.items = parsedData.items;
+        } else if (parsedData.Items && Array.isArray(parsedData.Items)) {
+          data.items = parsedData.Items;
+        } else if (parsedData.products && Array.isArray(parsedData.products)) {
+          data.items = parsedData.products;
+        } else if (parsedData.Products && Array.isArray(parsedData.Products)) {
+          data.items = parsedData.Products;
+        }
+        
+        // Process payment method
+        if (parsedData.paymentMethod) {
+          data.paymentMethod = parsedData.paymentMethod;
+        } else if (parsedData.PaymentMethod) {
+          data.paymentMethod = parsedData.PaymentMethod;
+        } else if (parsedData.payment || parsedData.Payment) {
+          data.paymentMethod = parsedData.payment || parsedData.Payment;
+        }
+        
+        // If we successfully parsed JSON, return the data
+        if (Object.keys(data).length > 0) {
+          console.log("Extracted structured data:", data);
+          return data;
+        } else {
+          console.log("Found JSON structure but couldn't extract expected fields");
+        }
+      } catch (parseError) {
+        console.error("Failed to parse extracted JSON:", parseError);
+      }
+    } else {
+      console.log("No JSON structure found in OCR response");
+    }
   } catch (error) {
-    console.log("Failed to parse JSON from AI response, falling back to regex", error);
+    console.log("Error while trying to extract JSON:", error);
   }
   
   // Fall back to regex-based extraction for backward compatibility
