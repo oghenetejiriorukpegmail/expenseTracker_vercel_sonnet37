@@ -106,37 +106,56 @@ export default function AddExpenseModal() {
         }
         
         const result = await response.json();
+        console.log('OCR processing result:', result);  // Debug log
         setOcrResult(result);
         
         // Auto-fill form fields if OCR was successful and extracted data
         if (result.success && result.formData) {
-          // Only fill in fields that are empty or if the user hasn't modified them
-          if (
-            !form.getValues('date') && 
-            !form.getValues('vendor') && 
-            !form.getValues('location') && 
-            !form.getValues('cost')
-          ) {
-            form.setValue('date', result.formData.date || '');
-            form.setValue('vendor', result.formData.vendor || '');
-            form.setValue('location', result.formData.location || '');
-            form.setValue('cost', result.formData.cost || '');
-            form.setValue('type', result.formData.type || 'Other');
-            
-            // If the form has comments field and it's empty, add items from receipt as comments
-            if (result.formData.items && Array.isArray(result.formData.items) && result.formData.items.length > 0) {
-              const itemsText = result.formData.items
-                .map((item: any) => `${item.name || item.description}: ${item.price || ''}`)
-                .join('\n');
-              
-              form.setValue('comments', itemsText);
-            }
-            
-            toast({
-              title: "Receipt Processed",
-              description: "Form has been filled with data extracted from your receipt.",
-            });
+          console.log('Setting form values with:', result.formData); // Debug log
+          
+          // Always populate fields with receipt data
+          if (result.formData.date) {
+            form.setValue('date', result.formData.date);
           }
+          
+          if (result.formData.vendor) {
+            form.setValue('vendor', result.formData.vendor);
+          }
+          
+          if (result.formData.location) {
+            form.setValue('location', result.formData.location);
+          }
+          
+          if (result.formData.cost) {
+            form.setValue('cost', result.formData.cost);
+          }
+          
+          if (result.formData.type) {
+            form.setValue('type', result.formData.type.toLowerCase());
+          }
+          
+          // If the form has comments field and it's empty, add items from receipt as comments
+          if (result.formData.items && Array.isArray(result.formData.items) && result.formData.items.length > 0) {
+            const itemsText = result.formData.items
+              .map((item: any) => `${item.name || item.description}: ${item.price || ''}`)
+              .join('\n');
+            
+            form.setValue('comments', itemsText);
+          }
+          
+          toast({
+            title: "Receipt Processed",
+            description: "Form has been filled with data extracted from your receipt.",
+          });
+          
+          // Trigger validation to update UI
+          form.trigger();
+        } else {
+          toast({
+            title: "Receipt Processing Partial",
+            description: "Some fields could not be extracted. Please fill them manually.",
+            variant: "warning",
+          });
         }
       } catch (error) {
         console.error('Error processing receipt:', error);
