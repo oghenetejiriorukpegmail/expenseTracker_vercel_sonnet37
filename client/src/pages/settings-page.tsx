@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -33,7 +33,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { 
+  Loader2, 
+  Upload, 
+  CheckCircle, 
+  AlertCircle 
+} from "lucide-react";
 
 const ocrSettingsSchema = z.object({
   ocrMethod: z.string(),
@@ -44,6 +49,9 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const { theme, ocrMethod, ocrApiKey, setOcrMethod, setOcrApiKey, toggleTheme } = useSettingsStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState<"none" | "loading" | "success" | "error">("none");
+  const [verificationMessage, setVerificationMessage] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const form = useForm<z.infer<typeof ocrSettingsSchema>>({
     resolver: zodResolver(ocrSettingsSchema),
@@ -110,6 +118,59 @@ export default function SettingsPage() {
       setIsSubmitting(false);
     }
   }
+  
+  const triggerFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+  
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const values = form.getValues();
+    
+    if (values.ocrMethod !== "tesseract" && (!values.ocrApiKey || values.ocrApiKey.trim() === "")) {
+      toast({
+        title: "API Key Required",
+        description: `Please enter your ${values.ocrMethod} API key first and save your settings.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setVerificationStatus("loading");
+    setVerificationMessage("Processing receipt...");
+    
+    const formData = new FormData();
+    formData.append("receipt", file);
+    
+    try {
+      const response = await fetch("/api/ocr/process", {
+        method: "POST",
+        body: formData,
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setVerificationStatus("success");
+        setVerificationMessage("Receipt processed successfully! Your OCR settings are working properly.");
+      } else {
+        setVerificationStatus("error");
+        setVerificationMessage(data.error || "Failed to process receipt. Check your API key and try again.");
+      }
+    } catch (error) {
+      setVerificationStatus("error");
+      setVerificationMessage(error instanceof Error ? error.message : "Failed to process receipt");
+    }
+    
+    // Reset the file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   return (
     <div className="flex flex-col md:flex-row h-screen">
@@ -256,24 +317,104 @@ export default function SettingsPage() {
                   </form>
                 </Form>
               </CardContent>
-              <CardFooter className="flex flex-col items-start border-t pt-6">
-                <h3 className="text-sm font-medium mb-2">OCR Methods</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full text-sm">
-                  <div>
-                    <p className="font-medium">Tesseract.js</p>
-                    <p className="text-gray-500 dark:text-gray-400">Free, runs locally in browser. No API key required but less accurate.</p>
+              <CardFooter className="flex flex-col items-start border-t pt-6 space-y-6">
+                {/* Verification Upload Section */}
+                <div className="w-full">
+                  <h3 className="text-sm font-medium mb-2">Verify OCR Settings</h3>
+                  <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-md border border-dashed border-gray-300 dark:border-gray-600">
+                    <div className="flex flex-col items-center justify-center space-y-3">
+                      <input 
+                        ref={fileInputRef}
+                        type="file" 
+                        accept="image/jpeg,image/png,image/jpg,application/pdf" 
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                      
+                      {verificationStatus === "none" && (
+                        <>
+                          <Upload className="h-8 w-8 text-gray-500" />
+                          <p className="text-sm text-center text-gray-500">
+                            Upload a receipt image or PDF to verify your OCR settings are working properly
+                          </p>
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            onClick={triggerFileInput}
+                            disabled={isSubmitting}
+                            className="mt-2"
+                          >
+                            Upload Receipt for Verification
+                          </Button>
+                        </>
+                      )}
+                      
+                      {verificationStatus === "loading" && (
+                        <>
+                          <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                          <p className="text-sm text-center text-gray-500">
+                            {verificationMessage}
+                          </p>
+                        </>
+                      )}
+                      
+                      {verificationStatus === "success" && (
+                        <>
+                          <CheckCircle className="h-8 w-8 text-green-500" />
+                          <p className="text-sm text-center text-green-500 font-medium">
+                            {verificationMessage}
+                          </p>
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            onClick={triggerFileInput}
+                            className="mt-2"
+                          >
+                            Try Another Receipt
+                          </Button>
+                        </>
+                      )}
+                      
+                      {verificationStatus === "error" && (
+                        <>
+                          <AlertCircle className="h-8 w-8 text-red-500" />
+                          <p className="text-sm text-center text-red-500">
+                            {verificationMessage}
+                          </p>
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            onClick={triggerFileInput}
+                            className="mt-2"
+                          >
+                            Try Again
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium">OpenAI Vision</p>
-                    <p className="text-gray-500 dark:text-gray-400">Uses OpenAI's GPT-4 Vision. Requires API key with billing setup.</p>
-                  </div>
-                  <div className="bg-primary/5 p-2 rounded-md">
-                    <p className="font-medium">Google Gemini (Recommended)</p>
-                    <p className="text-gray-500 dark:text-gray-400">Google's AI vision model with excellent receipt processing capability. Requires Gemini API key.</p>
-                  </div>
-                  <div>
-                    <p className="font-medium">Anthropic Claude</p>
-                    <p className="text-gray-500 dark:text-gray-400">Anthropic's Claude model with vision capabilities.</p>
+                </div>
+                
+                {/* OCR Methods Information */}
+                <div className="w-full">
+                  <h3 className="text-sm font-medium mb-2">OCR Methods</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full text-sm">
+                    <div>
+                      <p className="font-medium">Tesseract.js</p>
+                      <p className="text-gray-500 dark:text-gray-400">Free, runs locally in browser. No API key required but less accurate.</p>
+                    </div>
+                    <div>
+                      <p className="font-medium">OpenAI Vision</p>
+                      <p className="text-gray-500 dark:text-gray-400">Uses OpenAI's GPT-4 Vision. Requires API key with billing setup.</p>
+                    </div>
+                    <div className="bg-primary/5 p-2 rounded-md">
+                      <p className="font-medium">Google Gemini (Recommended)</p>
+                      <p className="text-gray-500 dark:text-gray-400">Google's AI vision model with excellent receipt processing capability. Requires Gemini API key.</p>
+                    </div>
+                    <div>
+                      <p className="font-medium">Anthropic Claude</p>
+                      <p className="text-gray-500 dark:text-gray-400">Anthropic's Claude model with vision capabilities.</p>
+                    </div>
                   </div>
                 </div>
               </CardFooter>
