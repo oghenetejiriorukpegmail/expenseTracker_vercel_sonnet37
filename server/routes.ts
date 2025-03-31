@@ -414,9 +414,12 @@ function guessExpenseType(text: string, vendor: string): string {
     try {
       if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
       
-      const { method, apiKey } = req.body;
+      const { method, apiKey, ocrApiKey } = req.body;
       
-      const result = await testOCR(method, apiKey);
+      // Use ocrApiKey if provided, otherwise use apiKey for backward compatibility
+      const actualApiKey = ocrApiKey !== undefined ? ocrApiKey : apiKey;
+      
+      const result = await testOCR(method, actualApiKey);
       
       res.json(result);
     } catch (error) {
@@ -429,7 +432,10 @@ function guessExpenseType(text: string, vendor: string): string {
     try {
       if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
       
-      const { ocrMethod, apiKey } = req.body;
+      const { ocrMethod, apiKey, ocrApiKey } = req.body;
+      
+      // Use ocrApiKey if provided, otherwise use apiKey for backward compatibility
+      const actualApiKey = ocrApiKey !== undefined ? ocrApiKey : apiKey;
       
       // In a real app, we would update the environment variables or store in database
       // For this example, we'll just return success

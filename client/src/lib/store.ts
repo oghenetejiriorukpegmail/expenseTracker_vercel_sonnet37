@@ -51,7 +51,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     } else {
       localStorage.removeItem('ocrApiKey');
     }
-    set({ ocrApiKey });
+    set({ ocrApiKey: apiKey });
   },
 }));
 
