@@ -280,7 +280,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Format the extracted data for form auto-fill
       const formattedData = {
         ...result,
-        formData: {
+        formData: result.extractedData ? {
           date: result.extractedData.date || '',
           vendor: result.extractedData.vendor || '',
           location: result.extractedData.location || '',
@@ -289,6 +289,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Include additional data like items, payment method, etc.
           items: result.extractedData.items || [],
           paymentMethod: result.extractedData.paymentMethod || '',
+        } : {
+          // Provide empty default values if no data was extracted
+          date: '',
+          vendor: '',
+          location: '',
+          cost: '',
+          type: 'other',
+          items: [],
+          paymentMethod: '',
         }
       };
       
