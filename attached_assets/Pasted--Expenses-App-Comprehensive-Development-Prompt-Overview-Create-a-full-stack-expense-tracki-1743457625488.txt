@@ -1,0 +1,261 @@
+# Expenses App - Comprehensive Development Prompt
+
+## Overview
+Create a full-stack expense tracking application with a React frontend and Node.js backend. The app should allow users to track expenses, categorize them by trips, upload and process receipts using OCR, visualize spending patterns, and export expense data to Excel.
+
+## Core Features
+
+### User Authentication
+- User registration and login system
+- JWT-based authentication
+- Protected routes for authenticated users
+
+### Trip Management
+- Create, edit, and delete trips
+- View all trips in a card-based layout
+- Each trip card should display name, description, and action buttons
+
+### Expense Tracking
+- Add, edit, and delete expenses
+- Associate expenses with specific trips
+- Track expense details: type, date, vendor, location, cost, and comments
+- Filter expenses by trip
+- Sort expenses by various fields (date, cost, type, etc.)
+
+### Receipt Management
+- Upload receipts as images or PDFs
+- View uploaded receipts
+- OCR processing to extract expense data from receipts
+- Multiple OCR options (Tesseract.js, OpenAI, Gemini, Claude, OpenRouter)
+
+### Data Visualization
+- Display expense breakdown by category
+- Show spending trends over time
+- Interactive charts and graphs
+
+### Data Export
+- Export trip expenses to Excel spreadsheets
+- Formatted tables with proper column headers and styling
+
+### Settings
+- Configure OCR API keys
+- Set preferred OCR method
+- Dark/light theme support
+
+## Technical Requirements
+
+### Frontend (React)
+- Use React with TypeScript for type safety
+- State management with Zustand
+- Routing with React Router
+- Styling with Tailwind CSS
+- Form handling with controlled components
+- Chart visualization with Chart.js
+- Toast notifications with react-hot-toast
+- Excel export with xlsx library
+
+### Backend (Node.js)
+- Express.js server
+- SQLite database with proper schema
+- JWT authentication middleware
+- File uploads with Multer
+- OCR processing with multiple options:
+  - Tesseract.js for local processing
+  - Integration with AI vision APIs (OpenAI, Google Gemini, Anthropic Claude)
+- CORS configuration for network access
+- Environment variable management
+
+## Detailed Component Breakdown
+
+### Pages
+1. **Login/Register Page**
+   - User authentication forms
+   - Form validation
+   - Error handling
+
+2. **Dashboard Page**
+   - Summary of recent expenses
+   - Expense breakdown charts
+   - Expense trend visualization
+   - Quick access to add new expenses
+
+3. **Trips Page**
+   - List of all trips in card format
+   - Add new trip form
+   - Edit/delete trip functionality
+   - Export trip expenses to Excel
+
+4. **Expenses Page**
+   - Filterable and sortable expense table
+   - Add/edit expense form
+   - Receipt upload and viewing
+   - OCR processing for receipts
+
+5. **Settings Page**
+   - API key configuration
+   - OCR method selection
+   - Theme settings
+
+### Components
+1. **ExpenseForm**
+   - Fields for all expense properties
+   - Receipt upload functionality
+   - Form validation
+
+2. **ExpenseList**
+   - Sortable table of expenses
+   - Action buttons for each expense
+   - Empty state handling
+
+3. **ExpenseChart**
+   - Pie chart for expense categories
+   - Responsive design
+
+4. **ExpenseTrendChart**
+   - Line chart for expense trends over time
+   - Date range selection
+
+5. **ReceiptUpload**
+   - Drag and drop file upload
+   - File type validation
+   - Upload progress indicator
+
+6. **ReceiptViewerModal**
+   - Image/PDF viewer for receipts
+   - Lightbox functionality
+
+7. **TripCard**
+   - Display trip details
+   - Action buttons (view expenses, add expense, export, edit, delete)
+   - Inline editing functionality
+
+## API Endpoints
+
+### Authentication
+- `POST /api/auth/register` - Register a new user
+- `POST /api/auth/login` - Login and receive JWT token
+
+### Trips
+- `GET /api/trips` - Get all trips for the authenticated user
+- `POST /api/trips` - Create a new trip
+- `PUT /api/trips/:id` - Update a trip
+- `DELETE /api/trips/:id` - Delete a trip
+
+### Expenses
+- `GET /api/expenses` - Get all expenses (with optional tripName filter)
+- `GET /api/expenses/:id` - Get a specific expense
+- `POST /api/expenses` - Create a new expense (with optional receipt upload)
+- `PUT /api/expenses/:id` - Update an expense
+- `DELETE /api/expenses/:id` - Delete an expense
+- `GET /api/export-expenses` - Export expenses to Excel (with tripName filter)
+
+### OCR
+- `POST /api/ocr/process` - Process a receipt with OCR
+- `POST /api/test-ocr` - Test OCR with different methods and models
+
+### Settings
+- `POST /api/update-env` - Update environment settings (API keys, OCR method)
+
+## Database Schema
+
+### Users Table
+```sql
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Trips Table
+```sql
+CREATE TABLE trips (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users (id),
+  UNIQUE(user_id, name)
+);
+```
+
+### Expenses Table
+```sql
+CREATE TABLE expenses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  date TEXT NOT NULL,
+  vendor TEXT NOT NULL,
+  location TEXT NOT NULL,
+  cost REAL NOT NULL,
+  comments TEXT,
+  tripName TEXT NOT NULL,
+  receiptPath TEXT,
+  createdAt TIMESTAMP,
+  updatedAt TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users (id)
+);
+```
+
+## Implementation Steps
+
+1. **Project Setup**
+   - Initialize React project with Vite and TypeScript
+   - Set up Node.js backend with Express
+   - Configure SQLite database
+   - Install required dependencies
+
+2. **Backend Development**
+   - Implement database schema
+   - Create API endpoints
+   - Set up authentication middleware
+   - Implement file upload functionality
+   - Integrate OCR processing options
+
+3. **Frontend Development**
+   - Create React components
+   - Implement routing
+   - Set up state management
+   - Design UI with Tailwind CSS
+   - Integrate with backend API
+
+4. **Feature Implementation**
+   - User authentication
+   - Trip management
+   - Expense tracking
+   - Receipt processing
+   - Data visualization
+   - Excel export
+
+5. **Testing and Refinement**
+   - Test all features
+   - Fix bugs and edge cases
+   - Optimize performance
+   - Improve user experience
+
+6. **Deployment**
+   - Configure for production
+   - Set up environment variables
+   - Deploy frontend and backend
+
+## Design Guidelines
+
+- Use a clean, modern UI with responsive design
+- Implement a consistent color scheme with light and dark mode support
+- Focus on usability and intuitive navigation
+- Use appropriate visual feedback for user actions
+- Ensure accessibility compliance
+
+## Additional Considerations
+
+- Implement proper error handling throughout the application
+- Add loading states for asynchronous operations
+- Include form validation for all user inputs
+- Optimize for mobile and desktop viewing
+- Implement proper security measures (input sanitization, CSRF protection)
+- Add comprehensive logging for debugging
+
+This prompt provides a detailed blueprint for creating a full-featured Expenses App with React frontend and Node.js backend, including all major features, components, and implementation details.
