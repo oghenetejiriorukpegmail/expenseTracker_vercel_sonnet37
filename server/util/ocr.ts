@@ -66,9 +66,11 @@ export async function processReceiptWithOCR(filePath: string, method: string = "
         
         // Fall back to image-based methods if possible
         if (method === 'gemini' || method === 'openai' || method === 'claude') {
-          // For models with vision capabilities, use file data directly
+          // For models with vision capabilities, use file data directly (PDF as an image)
+          console.log("Using vision API for PDF processing since text extraction failed");
           switch (method) {
             case "gemini":
+              // Use vision API directly for PDF
               result = await processGemini(filePath);
               break;
             case "openai":
@@ -166,14 +168,26 @@ export async function processReceiptWithOCR(filePath: string, method: string = "
 
 // Process with Tesseract.js (local OCR)
 async function processTesseract(filePath: string) {
-  const worker = await createWorker();
-  await worker.loadLanguage("eng");
-  await worker.initialize("eng");
-  
-  const { data: { text } } = await worker.recognize(filePath);
-  await worker.terminate();
-  
-  return text;
+  try {
+    const { createWorker } = await import('tesseract.js');
+    const worker = await createWorker();
+    
+    // Initialize with English language
+    await (worker as any).loadLanguage("eng");
+    await (worker as any).initialize("eng");
+    
+    // Process the image
+    const result = await worker.recognize(filePath);
+    const text = result.data.text;
+    
+    // Clean up
+    await worker.terminate();
+    
+    return text;
+  } catch (error) {
+    console.error('Error processing with Tesseract:', error);
+    throw new Error(`Tesseract OCR error: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 // Process OpenAI with text input from PDF

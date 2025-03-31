@@ -1,7 +1,8 @@
 import * as fs from 'fs';
-// Import dynamically to avoid the issue with test PDF file missing
-let pdfParse: any = null;
+import { PDFDocument } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 
+// Define our PDF data structure
 interface PDFData {
   text: string;
   numpages: number;
@@ -16,77 +17,206 @@ interface PDFData {
   version: string;
 }
 
-// Custom render function to improve text extraction
-function renderPage(pageData: any) {
-  // Check if text content is available
-  if (!pageData.getTextContent) {
-    return Promise.resolve("");
-  }
-  
-  return pageData.getTextContent({
-    normalizeWhitespace: true,
-    disableCombineTextItems: false,
-  }).then(function(textContent: any) {
-    let lastY, text = "";
-    
-    // Organize text by position
-    for (let item of textContent.items) {
-      if (lastY == item.transform[5] || !lastY) {
-        text += item.str;
-      } else {
-        text += "\n" + item.str;
-      }
-      lastY = item.transform[5];
-    }
-    
-    return text;
-  });
-}
+// We'll use PDF.js for text extraction
+let pdfjs: any = null;
 
-// Helper function to lazily load the pdf-parse module
-async function getPdfParser() {
-  if (!pdfParse) {
+// Helper function to load PDF.js only when needed
+async function loadPdfJs() {
+  if (!pdfjs) {
     try {
-      // This will prevent the library from looking for test PDFs at startup
-      process.env.PDF_TEST_SAMPLES = 'false';
-      pdfParse = await import('pdf-parse').then(module => module.default);
+      // Import pdfjs dynamically
+      const pdfjsLib = await import('pdfjs-dist');
+      
+      // In Node.js environment, we need to set the worker
+      if (typeof window === 'undefined') {
+        // For Node.js environment: disable worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+        
+        // Configure PDF.js to work in Node environment
+        const nodeCanvasFactory = {
+          create: function(width: number, height: number) {
+            return {
+              width,
+              height,
+              canvas: { width, height },
+              context: {
+                // Stub context for Node environment
+                drawImage: () => {},
+                fillRect: () => {},
+                fillText: () => {},
+                save: () => {},
+                restore: () => {},
+                scale: () => {},
+                transform: () => {},
+                beginPath: () => {},
+                rect: () => {},
+                fill: () => {},
+                stroke: () => {},
+                closePath: () => {},
+              }
+            };
+          },
+          reset: function() {},
+          destroy: function() {}
+        };
+        
+        // Use our minimal factory
+        (pdfjsLib as any).CanvasFactory = nodeCanvasFactory;
+      }
+      
+      pdfjs = pdfjsLib;
     } catch (error) {
-      console.error("Failed to load pdf-parse module:", error);
-      throw new Error("PDF parsing library not available");
+      console.error("Failed to load PDF.js:", error);
+      pdfjs = null;
     }
   }
-  return pdfParse;
+  return pdfjs;
 }
 
 /**
- * Parse PDF file using pdf-parse, which has better text extraction capabilities
- * than pdf-lib for our use case
+ * Parse PDF using PDF.js
+ */
+async function parsePdfWithPdfJs(dataBuffer: Buffer): Promise<string> {
+  try {
+    const pdfjsLib = await loadPdfJs();
+    if (!pdfjsLib) {
+      throw new Error("PDF.js library not available");
+    }
+    
+    // Load the PDF file
+    const loadingTask = pdfjsLib.getDocument({ data: dataBuffer });
+    const pdfDocument = await loadingTask.promise;
+    
+    // Extract text from all pages
+    let fullText = '';
+    
+    for (let i = 1; i <= pdfDocument.numPages; i++) {
+      const page = await pdfDocument.getPage(i);
+      const textContent = await page.getTextContent();
+      
+      // Process text content
+      let lastY, text = "";
+      for (const item of textContent.items) {
+        if (item.str) {
+          if (lastY == item.transform[5] || !lastY) {
+            text += item.str;
+          } else {
+            text += "\n" + item.str;
+          }
+          lastY = item.transform[5];
+        }
+      }
+      
+      fullText += text + '\n\n';
+    }
+    
+    return fullText;
+  } catch (error) {
+    console.error("PDF.js parsing error:", error);
+    return "";
+  }
+}
+
+/**
+ * Parse PDF with pdf-lib (fallback)
+ */
+async function parsePdfWithPdfLib(dataBuffer: Buffer): Promise<string> {
+  try {
+    // Load PDF document
+    const pdfDoc = await PDFDocument.load(dataBuffer);
+    pdfDoc.registerFontkit(fontkit);
+    
+    // Get document info
+    const form = pdfDoc.getForm();
+    const fields = form.getFields();
+    
+    // Extract form field values
+    let text = "";
+    
+    // Extract field data
+    if (fields.length > 0) {
+      for (const field of fields) {
+        const name = field.getName();
+        let value = "";
+        
+        // Try to get field value based on type
+        if (field.constructor.name === 'PDFTextField') {
+          const textField = field as any;
+          value = textField.getText() || "";
+        } else if (field.constructor.name === 'PDFCheckBox') {
+          const checkBox = field as any;
+          value = checkBox.isChecked() ? "☑" : "☐";
+        } else if (field.constructor.name === 'PDFDropdown') {
+          const dropdown = field as any;
+          value = dropdown.getSelected().join(", ") || "";
+        } else if (field.constructor.name === 'PDFRadioGroup') {
+          const radioGroup = field as any;
+          value = radioGroup.getSelected() || "";
+        }
+        
+        if (value) {
+          text += `${name}: ${value}\n`;
+        }
+      }
+    }
+    
+    // If we have at least some text, return it
+    if (text.trim()) {
+      return text;
+    } else {
+      // No form fields found or extracted
+      return "No text content could be extracted from this PDF.";
+    }
+  } catch (error) {
+    console.error("pdf-lib parsing error:", error);
+    return "";
+  }
+}
+
+/**
+ * Main function to parse PDF buffer
  */
 export async function parsePDF(dataBuffer: Buffer): Promise<PDFData> {
   try {
-    // Get the parser
-    const parser = await getPdfParser();
+    console.log("Attempting to parse PDF...");
     
-    // Use pdf-parse to extract text from PDF
-    const result = await parser(dataBuffer, {
-      pagerender: renderPage,
-    });
+    // Try PDF.js first for text extraction
+    let text = await parsePdfWithPdfJs(dataBuffer);
     
-    // Convert to our interface format
+    // If PDF.js failed, try pdf-lib as fallback
+    if (!text || text.trim() === '') {
+      console.log("PDF.js extraction failed, trying pdf-lib fallback");
+      text = await parsePdfWithPdfLib(dataBuffer);
+    }
+    
+    // If we still don't have text, return an error message
+    if (!text || text.trim() === '') {
+      text = "Could not extract text from this PDF. Try using an image of the receipt instead.";
+    }
+    
+    // Get page count using pdf-lib (more reliable)
+    const pdfDoc = await PDFDocument.load(dataBuffer);
+    const numPages = pdfDoc.getPageCount();
+    
+    // Log a sample of the extracted text
+    console.log(`Extracted ${text.length} chars from PDF. Sample: ${text.substring(0, 200)}...`);
+    
     return {
-      text: result.text || "",
-      numpages: result.numpages || 0,
-      numrender: result.numpages || 0,
+      text,
+      numpages: numPages,
+      numrender: numPages,
       info: {
         PDFFormatVersion: '1.7',
         IsAcroFormPresent: false,
         IsXFAPresent: false,
       },
-      metadata: result.metadata || null,
-      version: result.version || "1.0.0"
+      metadata: null,
+      version: "1.0.0"
     };
   } catch (error) {
     console.error("Error parsing PDF:", error);
+    
+    // Return a default response with error message
     return {
       text: "PDF text extraction failed. Try using an image of the receipt instead.",
       numpages: 0,
@@ -107,6 +237,7 @@ export async function parsePDF(dataBuffer: Buffer): Promise<PDFData> {
  */
 export async function parsePDFFile(filePath: string): Promise<PDFData> {
   try {
+    console.log(`Reading PDF file: ${filePath}`);
     const dataBuffer = fs.readFileSync(filePath);
     return parsePDF(dataBuffer);
   } catch (error) {

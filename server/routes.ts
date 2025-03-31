@@ -284,17 +284,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await processReceiptWithOCR(filePath, method);
       
       // Format the extracted data for form auto-fill
+      const extractedData = result.extractedData || {};
+      
+      // Safely access properties with type checking
+      const getExtractedValue = (key: string): string => {
+        if (extractedData && typeof extractedData === 'object' && key in extractedData) {
+          const value = extractedData[key as keyof typeof extractedData];
+          return value ? String(value) : '';
+        }
+        return '';
+      };
+      
+      // Get items array safely
+      const getItemsArray = (): any[] => {
+        if (extractedData && 
+            typeof extractedData === 'object' && 
+            'items' in extractedData && 
+            Array.isArray(extractedData.items)) {
+          return extractedData.items;
+        }
+        return [];
+      };
+      
+      // Get total cost
+      const getCostValue = (): string => {
+        if (extractedData && 
+            typeof extractedData === 'object' && 
+            'total' in extractedData && 
+            extractedData.total) {
+          return String(extractedData.total);
+        }
+        return '';
+      };
+      
+      const vendor = getExtractedValue('vendor');
+      
       const formattedData = {
         ...result,
-        formData: result.extractedData ? {
-          date: result.extractedData.date || '',
-          vendor: result.extractedData.vendor || '',
-          location: result.extractedData.location || '',
-          cost: result.extractedData.total ? result.extractedData.total.toString() : '',
-          type: guessExpenseType(result.text || '', result.extractedData.vendor || ''),
+        formData: result.success ? {
+          date: getExtractedValue('date'),
+          vendor: vendor,
+          location: getExtractedValue('location'),
+          cost: getCostValue(),
+          type: guessExpenseType(result.text || '', vendor),
           // Include additional data like items, payment method, etc.
-          items: result.extractedData.items || [],
-          paymentMethod: result.extractedData.paymentMethod || '',
+          items: getItemsArray(),
+          paymentMethod: getExtractedValue('paymentMethod'),
         } : {
           // Provide empty default values if no data was extracted
           date: '',
