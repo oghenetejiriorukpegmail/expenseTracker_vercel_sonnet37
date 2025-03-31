@@ -37,7 +37,7 @@ import { Loader2 } from "lucide-react";
 
 const ocrSettingsSchema = z.object({
   ocrMethod: z.string(),
-  apiKey: z.string().optional(),
+  ocrApiKey: z.string().optional(),
 });
 
 export default function SettingsPage() {
@@ -49,7 +49,7 @@ export default function SettingsPage() {
     resolver: zodResolver(ocrSettingsSchema),
     defaultValues: {
       ocrMethod: ocrMethod || "gemini",
-      apiKey: ocrApiKey || "",
+      ocrApiKey: ocrApiKey || "",
     },
   });
   
@@ -59,12 +59,12 @@ export default function SettingsPage() {
       // Save settings to backend
       await apiRequest("POST", "/api/update-env", {
         ocrMethod: values.ocrMethod,
-        apiKey: values.apiKey,
+        apiKey: values.ocrApiKey,
       });
       
       // Update local state
       setOcrMethod(values.ocrMethod);
-      setOcrApiKey(values.apiKey || null);
+      setOcrApiKey(values.ocrApiKey || null);
       
       toast({
         title: "Settings updated",
@@ -88,7 +88,7 @@ export default function SettingsPage() {
     try {
       const response = await apiRequest("POST", "/api/test-ocr", {
         method: values.ocrMethod,
-        apiKey: values.apiKey,
+        apiKey: values.ocrApiKey,
       });
       
       const data = await response.json();
@@ -176,7 +176,7 @@ export default function SettingsPage() {
                               field.onChange(value);
                               // Clear API key when switching to Tesseract
                               if (value === "tesseract") {
-                                form.setValue("apiKey", "");
+                                form.setValue("ocrApiKey", "");
                               }
                             }}
                           >
@@ -204,7 +204,7 @@ export default function SettingsPage() {
                     {form.watch("ocrMethod") !== "tesseract" && (
                       <FormField
                         control={form.control}
-                        name="apiKey"
+                        name="ocrApiKey"
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>API Key</FormLabel>
