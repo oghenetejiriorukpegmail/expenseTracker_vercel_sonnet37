@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
@@ -10,6 +10,12 @@ import { promises as fs } from "fs";
 import path from "path";
 import * as XLSX from "xlsx";
 import { createWriteStream } from "fs";
+import multer from "multer";
+
+// Define request type with file from multer
+interface MulterRequest extends Request {
+  file?: multer.File;
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
@@ -142,7 +148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/expenses", upload.single("receipt"), async (req, res, next) => {
+  app.post("/api/expenses", upload.single("receipt"), async (req: MulterRequest, res, next) => {
     try {
       if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
       
@@ -176,7 +182,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/expenses/:id", upload.single("receipt"), async (req, res, next) => {
+  app.put("/api/expenses/:id", upload.single("receipt"), async (req: MulterRequest, res, next) => {
     try {
       if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
       
@@ -261,7 +267,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // OCR processing routes
-  app.post("/api/ocr/process", upload.single("receipt"), async (req, res, next) => {
+  app.post("/api/ocr/process", upload.single("receipt"), async (req: MulterRequest, res, next) => {
     try {
       if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
       
