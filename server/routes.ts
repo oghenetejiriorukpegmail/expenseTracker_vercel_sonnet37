@@ -270,15 +270,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const filePath = path.join(process.cwd(), "uploads", req.file.filename);
+      
+      // Get the OCR method from the request or from the user's settings
       const method = req.body.method || "tesseract";
       
+      console.log(`Processing receipt with ${method} OCR method`);
       const result = await processReceiptWithOCR(filePath, method);
       
-      res.json(result);
+      // Format the extracted data for form auto-fill
+      const formattedData = {
+        ...result,
+        formData: {
+          date: result.extractedData.date || '',
+          vendor: result.extractedData.vendor || '',
+          location: result.extractedData.location || '',
+          cost: result.extractedData.total ? result.extractedData.total.toString() : '',
+          type: guessExpenseType(result.text || '', result.extractedData.vendor || ''),
+          // Include additional data like items, payment method, etc.
+          items: result.extractedData.items || [],
+          paymentMethod: result.extractedData.paymentMethod || '',
+        }
+      };
+      
+      res.json(formattedData);
     } catch (error) {
+      console.error("OCR processing error:", error);
       next(error);
     }
   });
+  
+// Helper function to guess expense type based on receipt content
+function guessExpenseType(text: string, vendor: string): string {
+  const lowerText = text.toLowerCase();
+  const lowerVendor = vendor.toLowerCase();
+  
+  // Check for transportation-related keywords
+  if (
+    lowerText.includes('airline') || 
+    lowerText.includes('flight') || 
+    lowerText.includes('taxi') || 
+    lowerText.includes('uber') || 
+    lowerText.includes('lyft') ||
+    lowerText.includes('train') ||
+    lowerText.includes('transit') ||
+    lowerVendor.includes('airlines') ||
+    lowerVendor.includes('air') ||
+    lowerVendor.includes('taxi') ||
+    lowerVendor.includes('uber') ||
+    lowerVendor.includes('lyft')
+  ) {
+    return 'Transportation';
+  }
+  
+  // Check for accommodation-related keywords
+  if (
+    lowerText.includes('hotel') ||
+    lowerText.includes('inn') ||
+    lowerText.includes('motel') ||
+    lowerText.includes('resort') ||
+    lowerText.includes('airbnb') ||
+    lowerText.includes('lodging') ||
+    lowerText.includes('stay') ||
+    lowerVendor.includes('hotel') ||
+    lowerVendor.includes('inn') ||
+    lowerVendor.includes('motel') ||
+    lowerVendor.includes('resort')
+  ) {
+    return 'Accommodation';
+  }
+  
+  // Check for food-related keywords
+  if (
+    lowerText.includes('restaurant') ||
+    lowerText.includes('cafe') ||
+    lowerText.includes('coffee') ||
+    lowerText.includes('breakfast') ||
+    lowerText.includes('lunch') ||
+    lowerText.includes('dinner') ||
+    lowerText.includes('food') ||
+    lowerText.includes('meal') ||
+    lowerVendor.includes('restaurant') ||
+    lowerVendor.includes('cafe') ||
+    lowerVendor.includes('coffee')
+  ) {
+    return 'Food';
+  }
+  
+  // Default to "Other" if no matches
+  return 'Other';
+}
 
   app.post("/api/test-ocr", async (req, res, next) => {
     try {

@@ -72,6 +72,88 @@ export default function AddExpenseModal() {
   
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isProcessingReceipt, setIsProcessingReceipt] = useState(false);
+  const [ocrResult, setOcrResult] = useState<any>(null);
+  
+  // Process receipt with OCR when a file is selected
+  useEffect(() => {
+    async function processReceipt() {
+      if (!receiptFile) {
+        setOcrResult(null);
+        return;
+      }
+      
+      setIsProcessingReceipt(true);
+      
+      try {
+        // Create form data for the receipt
+        const formData = new FormData();
+        formData.append('receipt', receiptFile);
+        
+        // Get OCR method from settings or use default
+        // In a real app, we might get this from user settings
+        formData.append('method', 'gemini'); // Using Google Gemini for OCR
+        
+        // Make API request to process receipt
+        const response = await fetch('/api/ocr/process', {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to process receipt');
+        }
+        
+        const result = await response.json();
+        setOcrResult(result);
+        
+        // Auto-fill form fields if OCR was successful and extracted data
+        if (result.success && result.formData) {
+          // Only fill in fields that are empty or if the user hasn't modified them
+          if (
+            !form.getValues('date') && 
+            !form.getValues('vendor') && 
+            !form.getValues('location') && 
+            !form.getValues('cost')
+          ) {
+            form.setValue('date', result.formData.date || '');
+            form.setValue('vendor', result.formData.vendor || '');
+            form.setValue('location', result.formData.location || '');
+            form.setValue('cost', result.formData.cost || '');
+            form.setValue('type', result.formData.type || 'Other');
+            
+            // If the form has comments field and it's empty, add items from receipt as comments
+            if (result.formData.items && Array.isArray(result.formData.items) && result.formData.items.length > 0) {
+              const itemsText = result.formData.items
+                .map((item: any) => `${item.name || item.description}: ${item.price || ''}`)
+                .join('\n');
+              
+              form.setValue('comments', itemsText);
+            }
+            
+            toast({
+              title: "Receipt Processed",
+              description: "Form has been filled with data extracted from your receipt.",
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error processing receipt:', error);
+        toast({
+          title: "Receipt Processing Failed",
+          description: error instanceof Error ? error.message : "Failed to process receipt",
+          variant: "destructive",
+        });
+      } finally {
+        setIsProcessingReceipt(false);
+      }
+    }
+    
+    if (receiptFile) {
+      processReceipt();
+    }
+  }, [receiptFile, form, toast]);
   
   const onSubmit = async (values: z.infer<typeof expenseSchema>) => {
     setIsSubmitting(true);
@@ -290,10 +372,30 @@ export default function AddExpenseModal() {
             
             <div>
               <FormLabel>Receipt</FormLabel>
-              <ReceiptUpload 
-                onFileSelect={(file) => setReceiptFile(file)} 
-                selectedFile={receiptFile}
-              />
+              <div className="relative">
+                {isProcessingReceipt && (
+                  <div className="absolute inset-0 bg-black/40 rounded-md z-10 flex items-center justify-center">
+                    <div className="bg-background p-3 rounded-md flex flex-col items-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
+                      <p className="text-sm">Processing receipt with AI...</p>
+                    </div>
+                  </div>
+                )}
+                <ReceiptUpload 
+                  onFileSelect={(file) => setReceiptFile(file)} 
+                  selectedFile={receiptFile}
+                />
+              </div>
+              {ocrResult && ocrResult.success && (
+                <div className="mt-2 text-sm text-green-600 dark:text-green-400">
+                  Receipt processed successfully. Form fields have been auto-filled.
+                </div>
+              )}
+              {ocrResult && !ocrResult.success && (
+                <div className="mt-2 text-sm text-red-600 dark:text-red-400">
+                  {ocrResult.error || "Failed to extract all data from the receipt. Please fill in the missing fields manually."}
+                </div>
+              )}
             </div>
             
             <DialogFooter>

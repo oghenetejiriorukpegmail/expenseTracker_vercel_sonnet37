@@ -48,7 +48,7 @@ export default function SettingsPage() {
   const form = useForm<z.infer<typeof ocrSettingsSchema>>({
     resolver: zodResolver(ocrSettingsSchema),
     defaultValues: {
-      ocrMethod: ocrMethod || "tesseract",
+      ocrMethod: ocrMethod || "gemini",
       apiKey: ocrApiKey || "",
     },
   });
@@ -187,8 +187,8 @@ export default function SettingsPage() {
                             </FormControl>
                             <SelectContent>
                               <SelectItem value="tesseract">Tesseract.js (Local)</SelectItem>
+                              <SelectItem value="gemini">Google Gemini (Recommended)</SelectItem>
                               <SelectItem value="openai">OpenAI Vision</SelectItem>
-                              <SelectItem value="gemini">Google Gemini</SelectItem>
                               <SelectItem value="claude">Anthropic Claude</SelectItem>
                               <SelectItem value="openrouter">OpenRouter</SelectItem>
                             </SelectContent>
@@ -267,9 +267,9 @@ export default function SettingsPage() {
                     <p className="font-medium">OpenAI Vision</p>
                     <p className="text-gray-500 dark:text-gray-400">Uses OpenAI's GPT-4 Vision. Requires API key with billing setup.</p>
                   </div>
-                  <div>
-                    <p className="font-medium">Google Gemini</p>
-                    <p className="text-gray-500 dark:text-gray-400">Google's AI vision model. Requires Gemini API key.</p>
+                  <div className="bg-primary/5 p-2 rounded-md">
+                    <p className="font-medium">Google Gemini (Recommended)</p>
+                    <p className="text-gray-500 dark:text-gray-400">Google's AI vision model with excellent receipt processing capability. Requires Gemini API key.</p>
                   </div>
                   <div>
                     <p className="font-medium">Anthropic Claude</p>

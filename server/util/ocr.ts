@@ -120,67 +120,91 @@ async function processGemini(filePath: string) {
   const fileData = fs.readFileSync(filePath);
   const base64Image = fileData.toString("base64");
   
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=${apiKey}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            {
-              text: "This is a receipt. Extract all text from it. Then analyze for: date, vendor/business name, items purchased, prices, total amount, and payment method if visible."
-            },
-            {
-              inline_data: {
-                mime_type: "image/jpeg",
-                data: base64Image
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: "You are an AI specialized in reading and extracting data from receipts. I'll provide you with a receipt image. Please extract all of the text you can see on the receipt. Then, analyze the receipt to identify: date, vendor/business name, location, individual items purchased with their prices, subtotal, tax, total amount, and payment method if visible. After you provide the raw extracted text, include a structured JSON object with these fields. Format your response with the extracted JSON object at the end, ensuring it's properly formatted for parsing. The JSON should include: date, vendor, location, items (array of items with name and price), total, and paymentMethod."
+              },
+              {
+                inline_data: {
+                  mime_type: "image/jpeg",
+                  data: base64Image
+                }
               }
-            }
-          ]
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 2048
         }
-      ]
-    })
-  });
+      })
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Gemini API error: ${errorText}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini API error: ${errorText}`);
+    }
+
+    const data = await response.json();
+    
+    // Return the text response from Gemini
+    if (data && 
+        data.candidates && 
+        data.candidates.length > 0 && 
+        data.candidates[0].content && 
+        data.candidates[0].content.parts && 
+        data.candidates[0].content.parts.length > 0) {
+      return data.candidates[0].content.parts[0].text;
+    } else {
+      throw new Error("Unexpected response format from Gemini API");
+    }
+  } catch (error) {
+    console.error("Error processing with Gemini:", error);
+    throw new Error(`Gemini API error: ${error instanceof Error ? error.message : String(error)}`);
   }
-
-  const data = await response.json();
-  return data.candidates[0].content.parts[0].text;
 }
 
 // Process with Anthropic Claude
 async function processClaude(filePath: string) {
-  const apiKey = process.env.CLAUDE_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    throw new Error("Claude API key not configured");
+    throw new Error("Anthropic API key not configured");
   }
+
+  // Import Anthropic SDK
+  const Anthropic = require('@anthropic-ai/sdk');
+  
+  // Initialize Anthropic client
+  const anthropic = new Anthropic({
+    apiKey: apiKey,
+  });
 
   // Read file as base64
   const fileData = fs.readFileSync(filePath);
   const base64Image = fileData.toString("base64");
   
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01"
-    },
-    body: JSON.stringify({
-      model: "claude-3-opus-20240229",
-      max_tokens: 1000,
+  try {
+    // the newest Anthropic model is "claude-3-7-sonnet-20250219" which was released February 24, 2025
+    const message = await anthropic.messages.create({
+      model: "claude-3-7-sonnet-20250219",
+      max_tokens: 2000,
+      system: "You are an AI assistant specialized in extracting and structuring data from receipts. Format your response to clearly separate the raw OCR text from your structured analysis. After the raw text extraction, provide a structured JSON format with fields for date, vendor, items (with prices), total, payment method, and location. Ensure the JSON is properly formatted for parsing.",
       messages: [
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: "This is a receipt. Extract all text from it. Then analyze for: date, vendor/business name, items purchased, prices, total amount, and payment method if visible."
+              text: "This is a receipt image. First, extract all visible text from the image. Second, analyze the receipt to identify: date, vendor/business name, location, individual items purchased with prices, subtotal, tax, total amount, and payment method if visible. Format this data in a structured JSON object at the end of your response."
             },
             {
               type: "image",
@@ -193,16 +217,13 @@ async function processClaude(filePath: string) {
           ]
         }
       ]
-    })
-  });
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Claude API error: ${errorText}`);
+    return message.content[0].text;
+  } catch (error) {
+    console.error('Error processing with Claude:', error);
+    throw new Error(`Claude API error: ${error.message}`);
   }
-
-  const data = await response.json();
-  return data.content[0].text;
 }
 
 // Process with OpenRouter
@@ -258,6 +279,54 @@ async function processOpenRouter(filePath: string) {
 function extractDataFromText(text: string) {
   const data: Record<string, any> = {};
   
+  // Try to extract JSON from the AI response
+  try {
+    const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```|(\{[\s\S]*\})/);
+    if (jsonMatch) {
+      const jsonStr = jsonMatch[1] || jsonMatch[2];
+      const parsedData = JSON.parse(jsonStr.trim());
+      
+      // Map the AI-extracted fields to our data structure
+      if (parsedData.date) {
+        data.date = parsedData.date;
+      }
+      
+      if (parsedData.vendor) {
+        data.vendor = parsedData.vendor;
+      }
+      
+      if (parsedData.location) {
+        data.location = parsedData.location;
+      }
+      
+      if (parsedData.total) {
+        // Handle total amount with or without currency symbol
+        const totalStr = parsedData.total.toString();
+        const totalMatch = totalStr.match(/\$?([0-9]+\.?[0-9]*)/);
+        if (totalMatch) {
+          data.total = parseFloat(totalMatch[1]);
+        }
+      }
+      
+      if (parsedData.items && Array.isArray(parsedData.items)) {
+        data.items = parsedData.items;
+      }
+      
+      if (parsedData.paymentMethod) {
+        data.paymentMethod = parsedData.paymentMethod;
+      }
+      
+      // If we successfully parsed JSON, return the data
+      if (Object.keys(data).length > 0) {
+        return data;
+      }
+    }
+  } catch (error) {
+    console.log("Failed to parse JSON from AI response, falling back to regex", error);
+  }
+  
+  // Fall back to regex-based extraction for backward compatibility
+  
   // Date extraction pattern (various formats)
   const datePatterns = [
     /date:?\s*([0-9]{1,2}[\/\-\.][0-9]{1,2}[\/\-\.][0-9]{2,4})/i,
@@ -284,6 +353,20 @@ function extractDataFromText(text: string) {
     const match = text.match(pattern);
     if (match && match[1]) {
       data.vendor = match[1].trim();
+      break;
+    }
+  }
+  
+  // Location extraction
+  const locationPatterns = [
+    /location:?\s*([a-z0-9\s\.,&'-]+)/i,
+    /address:?\s*([a-z0-9\s\.,&'-]+)/i, 
+  ];
+  
+  for (const pattern of locationPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      data.location = match[1].trim();
       break;
     }
   }
@@ -377,15 +460,18 @@ async function testGeminiAPI(apiKey: string) {
 }
 
 async function testClaudeAPI(apiKey: string) {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01"
-    },
-    body: JSON.stringify({
-      model: "claude-3-haiku-20240307",
+  try {
+    // Import Anthropic SDK
+    const Anthropic = require('@anthropic-ai/sdk');
+    
+    // Initialize Anthropic client
+    const anthropic = new Anthropic({
+      apiKey: apiKey,
+    });
+    
+    // the newest Anthropic model is "claude-3-7-sonnet-20250219" which was released February 24, 2025
+    await anthropic.messages.create({
+      model: "claude-3-7-sonnet-20250219",
       max_tokens: 10,
       messages: [
         {
@@ -393,11 +479,10 @@ async function testClaudeAPI(apiKey: string) {
           content: "Hello"
         }
       ]
-    })
-  });
-  
-  if (!response.ok) {
-    throw new Error("Invalid Claude API key or API error");
+    });
+  } catch (error) {
+    console.error('Error testing Claude API:', error);
+    throw new Error("Invalid Anthropic API key or API error");
   }
 }
 

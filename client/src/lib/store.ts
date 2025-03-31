@@ -14,7 +14,7 @@ interface SettingsState {
 
 export const useSettingsStore = create<SettingsState>((set) => ({
   theme: (localStorage.getItem('theme') as ThemeMode) || 'light',
-  ocrMethod: localStorage.getItem('ocrMethod') || 'tesseract',
+  ocrMethod: localStorage.getItem('ocrMethod') || 'gemini',
   ocrApiKey: localStorage.getItem('ocrApiKey'),
   
   setTheme: (theme) => {
