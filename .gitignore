@@ -15,3 +15,7 @@ sqlite.db-shm # SQLite shared memory file
 .env
 .env.*
 !.env.example # Keep example env file if it exists
+
+# Uploaded files
+/uploads/
+!.env.example # Keep example env file if it exists
