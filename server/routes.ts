@@ -323,7 +323,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const dateValue = getExtractedValue('date');
       const locationValue = getExtractedValue('location');
       const typeValue = vendor ? guessExpenseType(result.text || '', vendor) : '';
-      const totalAmountValue = getCostValue();
+      
+      // Check for various total amount field names that might be used
+      let totalAmountValue = '';
+      ['total_amount', 'total', 'amount', 'cost', 'price', 'subtotal', 'sub_total', 'grand_total'].forEach(field => {
+        if (!totalAmountValue && extractedData && field in extractedData) {
+          totalAmountValue = String(extractedData[field as keyof typeof extractedData]);
+        }
+      });
+      
+      // Add more verbose logging of what we found
+      console.log('Extracted data summary:');
+      console.log('- Date:', dateValue || 'Not found');
+      console.log('- Vendor:', vendor || 'Not found');
+      console.log('- Location:', locationValue || 'Not found');
+      console.log('- Type:', typeValue || 'Not found');
+      console.log('- Total Amount:', totalAmountValue || 'Not found');
+      console.log('- Items:', getItemsArray().length > 0 ? 'Found ' + getItemsArray().length + ' items' : 'No items found');
       
       // Combined response with both the original extracted data and formatted data for form fields
       const formattedData = {
@@ -333,7 +349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           date: dateValue,
           vendor: vendor,
           location: locationValue,
-          type: typeValue,
+          type: typeValue || guessExpenseType(result.text || '', ''), // Fallback to text-based guess if vendor is empty
           total_amount: totalAmountValue,
           items: getItemsArray(),
         },
@@ -368,61 +384,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
 // Helper function to guess expense type based on receipt content
 function guessExpenseType(text: string, vendor: string): string {
   const lowerText = text.toLowerCase();
-  const lowerVendor = vendor.toLowerCase();
+  const lowerVendor = vendor ? vendor.toLowerCase() : '';
+  
+  console.log('Guessing expense type from text:', lowerText.substring(0, 100) + '...');
   
   // Check for transportation-related keywords
+  const transportKeywords = [
+    'airline', 'flight', 'taxi', 'uber', 'lyft', 'train', 'transit', 'bus', 'car rental',
+    'rental car', 'parking', 'gas', 'fuel', 'metro', 'subway', 'transport', 'ticket'
+  ];
+  
   if (
-    lowerText.includes('airline') || 
-    lowerText.includes('flight') || 
-    lowerText.includes('taxi') || 
-    lowerText.includes('uber') || 
-    lowerText.includes('lyft') ||
-    lowerText.includes('train') ||
-    lowerText.includes('transit') ||
-    lowerVendor.includes('airlines') ||
-    lowerVendor.includes('air') ||
-    lowerVendor.includes('taxi') ||
-    lowerVendor.includes('uber') ||
-    lowerVendor.includes('lyft')
+    transportKeywords.some(keyword => lowerText.includes(keyword)) ||
+    (lowerVendor && 
+      ['airlines', 'air', 'taxi', 'uber', 'lyft', 'train', 'transit', 'hertz', 'avis', 'rental'].some(
+        keyword => lowerVendor.includes(keyword)
+      )
+    )
   ) {
+    console.log('Detected as: Transportation');
     return 'Transportation';
   }
   
   // Check for accommodation-related keywords
+  const accommodationKeywords = [
+    'hotel', 'inn', 'motel', 'resort', 'airbnb', 'lodging', 'stay', 'suite', 'room',
+    'accommodation', 'booking.com', 'reservation', 'nights'
+  ];
+  
   if (
-    lowerText.includes('hotel') ||
-    lowerText.includes('inn') ||
-    lowerText.includes('motel') ||
-    lowerText.includes('resort') ||
-    lowerText.includes('airbnb') ||
-    lowerText.includes('lodging') ||
-    lowerText.includes('stay') ||
-    lowerVendor.includes('hotel') ||
-    lowerVendor.includes('inn') ||
-    lowerVendor.includes('motel') ||
-    lowerVendor.includes('resort')
+    accommodationKeywords.some(keyword => lowerText.includes(keyword)) ||
+    (lowerVendor && 
+      ['hotel', 'inn', 'motel', 'resort', 'lodging', 'airbnb', 'booking', 'marriott', 'hilton'].some(
+        keyword => lowerVendor.includes(keyword)
+      )
+    )
   ) {
+    console.log('Detected as: Accommodation');
     return 'Accommodation';
   }
   
   // Check for food-related keywords
+  const foodKeywords = [
+    'restaurant', 'cafe', 'coffee', 'breakfast', 'lunch', 'dinner', 'food', 'meal',
+    'pizza', 'burger', 'sandwich', 'drink', 'menu', 'order', 'takeout', 'delivery',
+    'appetizer', 'dessert', 'entree', 'beer', 'wine', 'cocktail', 'beverage', 'bakery',
+    'server', 'waiter', 'chef', 'kitchen', 'diner', 'bistro', 'grill', 'starbucks', 'mcdonalds'
+  ];
+  
   if (
-    lowerText.includes('restaurant') ||
-    lowerText.includes('cafe') ||
-    lowerText.includes('coffee') ||
-    lowerText.includes('breakfast') ||
-    lowerText.includes('lunch') ||
-    lowerText.includes('dinner') ||
-    lowerText.includes('food') ||
-    lowerText.includes('meal') ||
-    lowerVendor.includes('restaurant') ||
-    lowerVendor.includes('cafe') ||
-    lowerVendor.includes('coffee')
+    foodKeywords.some(keyword => lowerText.includes(keyword)) ||
+    (lowerVendor && 
+      ['restaurant', 'cafe', 'coffee', 'bistro', 'grill', 'kitchen', 'bakery', 'pizzeria'].some(
+        keyword => lowerVendor.includes(keyword)
+      )
+    )
   ) {
+    console.log('Detected as: Food');
     return 'Food';
   }
   
+  // Check for other common expense types
+  if (lowerText.includes('office') || lowerText.includes('supplies') || lowerText.includes('stationery')) {
+    console.log('Detected as: Office Supplies');
+    return 'Office Supplies';
+  }
+  
+  if (lowerText.includes('entertainment') || lowerText.includes('movie') || lowerText.includes('theatre') || lowerText.includes('theater')) {
+    console.log('Detected as: Entertainment');
+    return 'Entertainment';
+  }
+  
   // Default to "Other" if no matches
+  console.log('No specific type detected, using: Other');
   return 'Other';
 }
 

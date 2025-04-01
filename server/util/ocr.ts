@@ -148,13 +148,44 @@ export async function processReceiptWithOCR(filePath: string, method: string = "
         extractedData
       };
     } catch (dataError) {
-      console.error("Error extracting structured data:", dataError);
-      // Return partial success - text was extracted but structured data failed
+      console.log("No structured JSON found, attempting to parse raw text for basic info");
+      
+      // If no JSON, try to extract some basic data from raw text
+      const text = result.toLowerCase();
+      const basicData: Record<string, any> = {};
+      
+      // Guess the type from text content using simplified heuristics
+      if (text.includes('hotel') || text.includes('room') || text.includes('stay') || text.includes('inn')) {
+        basicData.type = 'Accommodation';
+      } else if (text.includes('restaurant') || text.includes('food') || text.includes('meal') || 
+          text.includes('burger') || text.includes('pizza') || text.includes('coffee')) {
+        basicData.type = 'Food';
+      } else if (text.includes('taxi') || text.includes('uber') || text.includes('lyft') || 
+          text.includes('flight') || text.includes('train') || text.includes('transit')) {
+        basicData.type = 'Transportation';
+      } else {
+        basicData.type = 'Other';
+      }
+      
+      // Try to find date patterns (simple regex for MM/DD/YYYY or similar)
+      const dateMatches = text.match(/\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})\b/);
+      if (dateMatches) {
+        basicData.date = dateMatches[0];
+      }
+      
+      // Look for dollar amounts (potential total)
+      const amountMatches = text.match(/\$\s*(\d+\.\d{2})/);
+      if (amountMatches) {
+        basicData.total_amount = amountMatches[1];
+      }
+      
+      console.log("Extracted basic data from raw text:", basicData);
+      
       return {
         success: true,
         text: result,
-        extractedData: {}, // Empty data
-        extractionError: dataError instanceof Error ? dataError.message : "Failed to extract structured data"
+        extractedData: basicData,
+        extractionError: "No structured JSON data found, extracted basic information from raw text"
       };
     }
   } catch (error) {

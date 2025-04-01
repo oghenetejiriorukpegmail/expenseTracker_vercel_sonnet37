@@ -164,15 +164,26 @@ export default function SettingsPage() {
       const data = await response.json();
       
       if (data.success) {
-        // Extract structured data if available
-        if (data.data && Object.keys(data.data).length > 0) {
-          setExtractedData(data.data);
+        // Log the full response to see what we're getting
+        console.log("OCR Response:", data);
+        
+        // Always set the data regardless of whether it seems empty
+        setExtractedData(data.data || {});
+        
+        // Check if we got any meaningful data
+        const hasData = data.data && Object.values(data.data).some(val => 
+          val && (typeof val === 'string' && val.trim() !== '') || 
+                (typeof val === 'number') || 
+                (Array.isArray(val) && val.length > 0)
+        );
+        
+        if (hasData) {
           setVerificationStatus("success");
           setVerificationMessage("Receipt processed successfully! See extracted data below.");
         } else {
-          // Handle case where OCR worked but no structured data was extracted
-          setVerificationStatus("error");
-          setVerificationMessage("Receipt was processed, but no structured data could be extracted. Try another image or a different OCR method.");
+          // Show partial success for OCR but no structured data
+          setVerificationStatus("success");
+          setVerificationMessage("Receipt was processed, but limited data was extracted. You may need to try another image or a different OCR method.");
         }
       } else {
         setVerificationStatus("error");
