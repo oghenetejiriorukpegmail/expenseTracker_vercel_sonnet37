@@ -4,3 +4,14 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# Database file
+sqlite.db
+sqlite.db-journal # SQLite journal file
+sqlite.db-wal # SQLite WAL file
+sqlite.db-shm # SQLite shared memory file
+
+# Environment variables
+.env
+.env.*
+!.env.example # Keep example env file if it exists

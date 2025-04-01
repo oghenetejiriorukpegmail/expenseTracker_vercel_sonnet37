@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1743484839735,
+      "tag": "0000_good_bromley",
+      "breakpoints": true
+    }
+  ]
+}

@@ -11,8 +11,8 @@ interface TripCardProps {
   trip: {
     id: number;
     name: string;
-    description: string;
-    createdAt: string;
+    description: string | null; // Allow null description
+    createdAt: string | Date | null; // Allow Date or null from DB type
   };
 }
 
@@ -22,9 +22,20 @@ export default function TripCard({ trip }: TripCardProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   
-  // Fetch expenses for this trip
+  // Fetch expenses specifically for this trip
   const { data: tripExpenses } = useQuery({
-    queryKey: ["/api/expenses", { tripName: trip.name }],
+    queryKey: ["/api/expenses", trip.name], // Use trip name in the key for uniqueness
+    queryFn: async () => {
+      // Construct URL with tripName query parameter
+      const url = `/api/expenses?tripName=${encodeURIComponent(trip.name)}`;
+      const res = await fetch(url, { credentials: 'include' });
+      if (!res.ok) {
+         const errorText = await res.text();
+         throw new Error(`Failed to fetch expenses for trip ${trip.name}: ${errorText}`);
+      }
+      return await res.json();
+    },
+    // Optional: Add staleTime or other options if needed
   });
   
   const expenseCount = tripExpenses?.length || 0;
@@ -96,14 +107,18 @@ export default function TripCard({ trip }: TripCardProps) {
     // we'll handle that in the modal component itself
   };
   
-  const formattedDate = format(new Date(trip.createdAt), "MMM d, yyyy");
+  // Format date safely, handling potential null or Date object
+  const formattedDate = trip.createdAt
+    ? format(new Date(trip.createdAt), "MMM d, yyyy")
+    : "Date unknown";
 
   return (
     <div className="p-4 border dark:border-gray-700 rounded-lg hover:shadow-md transition">
       <div className="flex justify-between items-start">
         <div>
           <h4 className="font-medium text-base">{trip.name}</h4>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{trip.description}</p>
+          {/* Display description or empty string if null */}
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{trip.description || ''}</p>
           <div className="mt-2 flex items-center">
             <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -47,101 +47,94 @@ export async function processReceiptWithOCR(filePath: string, method: string = "
       throw new Error("Receipt file not found");
     }
 
-    // Check file type
+    // Check file type FIRST
     const fileType = getFileType(filePath);
     console.log(`Processing receipt of type ${fileType} with ${method} OCR method`);
-    
-    // Process differently based on file type and OCR method
+
     let result;
-    
-    // For PDFs
+    let effectiveMethod = method; // Keep track of the method actually used
+
+    // === PDF Processing Logic ===
     if (fileType === 'pdf') {
-      console.log(`PDF receipt detected, extracting text...`);
-      // Extract text content from PDF
-      const pdfText = await extractTextFromPDF(filePath);
-      
-      // Handle empty PDF text
-      if (!pdfText || pdfText.trim() === '') {
-        console.log('PDF text extraction yielded no text, will attempt vision-based processing');
-        
-        // Fall back to image-based methods if possible
-        if (method === 'gemini' || method === 'openai' || method === 'claude') {
-          // For models with vision capabilities, use file data directly (PDF as an image)
-          console.log("Using vision API for PDF processing since text extraction failed");
-          switch (method) {
-            case "gemini":
-              // Use vision API directly for PDF
-              result = await processGemini(filePath);
-              break;
-            case "openai":
-              result = await processOpenAI(filePath);
-              break;
-            case "claude":
-              result = await processClaude(filePath);
-              break;
-            default:
-              throw new Error(`No text content found in PDF and no vision fallback for method: ${method}`);
-          }
+      console.log(`PDF receipt detected. Checking for vision API support...`);
+
+      // Determine the best method for PDF (prefer vision APIs)
+      if (method === 'tesseract' || !['gemini', 'openai', 'claude'].includes(method)) {
+        // If Tesseract or an unsupported method is chosen, try to switch to a vision API
+        if (process.env.GEMINI_API_KEY) {
+          console.log(`Switching from ${method} to Gemini for PDF processing.`);
+          effectiveMethod = 'gemini';
+        } else if (process.env.OPENAI_API_KEY) {
+          console.log(`Switching from ${method} to OpenAI for PDF processing.`);
+          effectiveMethod = 'openai';
+        } else if (process.env.ANTHROPIC_API_KEY) {
+          console.log(`Switching from ${method} to Claude for PDF processing.`);
+          effectiveMethod = 'claude';
         } else {
-          throw new Error("PDF text extraction failed and selected OCR method doesn't support direct image processing");
+          console.log("No vision API keys found. Tesseract cannot process PDFs directly.");
+          effectiveMethod = 'tesseract'; // Keep as tesseract to hit the specific error case
         }
       } else {
-        // Process the extracted PDF text with the selected AI model
-        console.log(`Successfully extracted PDF text (${pdfText.length} chars), processing with ${method}...`);
-        switch (method) {
-          case "tesseract":
-            // Tesseract doesn't process text directly, so we'll just return the extracted PDF text
-            result = pdfText;
-            break;
-          case "openai":
-            result = await processOpenAIText(pdfText);
-            break;
-          case "gemini":
-            result = await processGeminiText(pdfText);
-            break;
-          case "claude":
-            result = await processClaudeText(pdfText);
-            break;
-          case "openrouter":
-            result = await processOpenRouterText(pdfText);
-            break;
-          default:
-            throw new Error(`Unsupported OCR method for PDF: ${method}`);
-        }
+         effectiveMethod = method; // Use the originally selected vision method
       }
-    } else {
-      // For image files, use the direct vision-based methods
-      console.log(`Image receipt detected, processing with ${method}...`);
-      switch (method) {
-        case "tesseract":
-          result = await processTesseract(filePath);
+
+
+      // Use the determined effective method for PDF processing
+      console.log(`Using ${effectiveMethod} for PDF processing.`);
+      switch (effectiveMethod) {
+        case "gemini":
+          result = await processGemini(filePath); // Directly process PDF with vision
           break;
         case "openai":
-          result = await processOpenAI(filePath);
-          break;
-        case "gemini":
-          result = await processGemini(filePath);
+          result = await processOpenAI(filePath); // Directly process PDF with vision
           break;
         case "claude":
-          result = await processClaude(filePath);
+          result = await processClaude(filePath); // Directly process PDF with vision
           break;
-        case "openrouter":
-          result = await processOpenRouter(filePath);
+        case "tesseract":
+          console.log("Tesseract cannot process PDFs directly. Please use Gemini, OpenAI, or Claude for PDF processing.");
+          result = "PDF processing requires Gemini, OpenAI, or Claude. Tesseract cannot process PDFs directly.";
           break;
         default:
-          throw new Error(`Unsupported OCR method: ${method}`);
+          // This case should ideally not be reached due to the logic above
+          throw new Error(`Unsupported effective OCR method for PDF: ${effectiveMethod}`);
       }
     }
-    
-    // Try to extract structured data from the OCR result
+    // === Image Processing Logic ===
+    else { // fileType is 'image'
+      console.log(`Image receipt detected, processing with ${method}...`);
+      // For image files, use vision APIs directly
+       switch (method) {
+         case "tesseract":
+           result = await processTesseract(filePath); // Tesseract works on images
+           break;
+         case "openai":
+           result = await processOpenAI(filePath); // Using vision API
+           break;
+         case "gemini":
+           result = await processGemini(filePath); // Using vision API
+           break;
+         case "claude":
+           result = await processClaude(filePath); // Using vision API
+           break;
+         case "openrouter":
+           result = await processOpenRouter(filePath); // Assuming vision capability
+           break;
+         default:
+           throw new Error(`Unsupported OCR method for image: ${method}`);
+       }
+    }
+
+    // --- Post-processing (common for both PDF and Image results) ---
+
     // Log a sample of the result for debugging
     console.log(`OCR result (first 100 chars): ${result.substring(0, 100)}...`);
-    
+
     try {
       // Extract structured data from the OCR text
-      const extractedData = extractDataFromText(result);
+      const extractedData = extractDataFromText(result); // This function parses the AI/OCR output string
       console.log("Successfully extracted structured data:", extractedData);
-      
+
       return {
         success: true,
         text: result,
@@ -256,8 +249,22 @@ async function processOpenAIText(textContent: string) {
     throw new Error(`OpenAI API error: ${errorText}`);
   }
 
-  const data = await response.json();
-  return data.choices[0].message.content;
+  // Define the expected response type
+  interface OpenAIResponse {
+    choices?: Array<{
+      message?: {
+        content?: string;
+      };
+    }>;
+  }
+
+  const data = await response.json() as OpenAIResponse;
+  
+  if (data?.choices?.[0]?.message?.content) {
+    return data.choices[0].message.content;
+  } else {
+    throw new Error("Unexpected response format from OpenAI API");
+  }
 }
 
 // Process Gemini with text input from PDF
@@ -295,14 +302,26 @@ async function processGeminiText(textContent: string) {
       throw new Error(`Gemini API error: ${errorText}`);
     }
 
-    const data = await response.json();
+    // Define the expected response type
+    interface GeminiResponse {
+      candidates?: Array<{
+        content?: {
+          parts?: Array<{
+            text?: string;
+          }>;
+        };
+      }>;
+    }
+
+    const data = await response.json() as GeminiResponse;
     
-    if (data && 
-        data.candidates && 
-        data.candidates.length > 0 && 
-        data.candidates[0].content && 
-        data.candidates[0].content.parts && 
-        data.candidates[0].content.parts.length > 0) {
+    if (data &&
+        data.candidates &&
+        data.candidates.length > 0 &&
+        data.candidates[0].content &&
+        data.candidates[0].content.parts &&
+        data.candidates[0].content.parts.length > 0 &&
+        data.candidates[0].content.parts[0].text) {
       return data.candidates[0].content.parts[0].text;
     } else {
       throw new Error("Unexpected response format from Gemini API");
@@ -342,10 +361,15 @@ async function processClaudeText(textContent: string) {
       ]
     });
 
-    return message.content[0].text;
-  } catch (error) {
+    if (message?.content?.[0]?.text) {
+      return message.content[0].text;
+    } else {
+      throw new Error("Unexpected response format from Claude API");
+    }
+  } catch (error: unknown) {
     console.error('Error processing text with Claude:', error);
-    throw new Error(`Claude API error: ${error.message}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`Claude API error: ${errorMessage}`);
   }
 }
 
@@ -383,8 +407,22 @@ async function processOpenRouterText(textContent: string) {
     throw new Error(`OpenRouter API error: ${errorText}`);
   }
 
-  const data = await response.json();
-  return data.choices[0].message.content;
+  // Define the expected response type
+  interface OpenRouterResponse {
+    choices?: Array<{
+      message?: {
+        content?: string;
+      };
+    }>;
+  }
+
+  const data = await response.json() as OpenRouterResponse;
+  
+  if (data?.choices?.[0]?.message?.content) {
+    return data.choices[0].message.content;
+  } else {
+    throw new Error("Unexpected response format from OpenRouter API");
+  }
 }
 
 // Process with OpenAI Vision API
@@ -432,21 +470,64 @@ async function processOpenAI(filePath: string) {
     throw new Error(`OpenAI API error: ${errorText}`);
   }
 
-  const data = await response.json();
-  return data.choices[0].message.content;
+  // Define the expected response type
+  interface OpenAIResponse {
+    choices?: Array<{
+      message?: {
+        content?: string;
+      };
+    }>;
+  }
+
+  const data = await response.json() as OpenAIResponse;
+  
+  if (data?.choices?.[0]?.message?.content) {
+    return data.choices[0].message.content;
+  } else {
+    throw new Error("Unexpected response format from OpenAI API");
+  }
 }
 
 // Process with Google Gemini
 async function processGemini(filePath: string) {
+  // Try to get API key from environment variable or from request
   const apiKey = process.env.GEMINI_API_KEY;
+  
   if (!apiKey) {
-    throw new Error("Gemini API key not configured");
+    console.error("Gemini API key not found in environment variables");
+    throw new Error("Gemini API key not configured. Please set your API key in the settings page.");
   }
+  
+  console.log("Using Gemini API key:", apiKey.substring(0, 4) + "..." + apiKey.substring(apiKey.length - 4));
 
   // Read file as base64
   const fileData = fs.readFileSync(filePath);
-  const base64Image = fileData.toString("base64");
-  
+  const base64Data = fileData.toString("base64");
+
+  // Determine MIME type based on file extension
+  const fileExt = path.extname(filePath).toLowerCase();
+  let mimeType;
+  switch (fileExt) {
+    case '.pdf':
+      mimeType = 'application/pdf';
+      break;
+    case '.png':
+      mimeType = 'image/png';
+      break;
+    case '.jpg':
+    case '.jpeg':
+      mimeType = 'image/jpeg';
+      break;
+    case '.gif':
+       mimeType = 'image/gif';
+       break;
+    // Add other supported types if needed
+    default:
+      throw new Error(`Unsupported file type for Gemini processing: ${fileExt}`);
+  }
+  console.log(`Determined MIME type for Gemini: ${mimeType}`);
+
+
   try {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method: "POST",
@@ -458,12 +539,12 @@ async function processGemini(filePath: string) {
           {
             parts: [
               {
-                text: "You are an AI specialized in reading and extracting data from receipts. I'll provide you with a receipt image. Please extract all of the text you can see on the receipt. Then, analyze the receipt to identify: date, vendor/business name, location, individual items purchased with their prices, subtotal, tax, total amount, and payment method if visible. After you provide the raw extracted text, include a structured JSON object with these fields. Format your response with the extracted JSON object at the end, ensuring it's properly formatted for parsing. The JSON should include: date, vendor, location, items (array of items with name and price), total, and paymentMethod."
+                text: "You are an AI specialized in reading and extracting data from receipts. I'll provide you with a receipt image or PDF. Please extract all of the text you can see. Then, analyze the receipt to identify: date, vendor/business name, location, individual items purchased with their prices, subtotal, tax, total amount, and payment method if visible. After you provide the raw extracted text, include a structured JSON object with these fields. Format your response with the extracted JSON object at the end, ensuring it's properly formatted for parsing. The JSON should include: date, vendor, location, items (array of items with name and price), total, and paymentMethod."
               },
               {
                 inline_data: {
-                  mime_type: "image/jpeg",
-                  data: base64Image
+                  mime_type: mimeType, // Use determined MIME type
+                  data: base64Data
                 }
               }
             ]
@@ -481,15 +562,27 @@ async function processGemini(filePath: string) {
       throw new Error(`Gemini API error: ${errorText}`);
     }
 
-    const data = await response.json();
+    // Define the expected response type
+    interface GeminiResponse {
+      candidates?: Array<{
+        content?: {
+          parts?: Array<{
+            text?: string;
+          }>;
+        };
+      }>;
+    }
+
+    const data = await response.json() as GeminiResponse;
     
     // Return the text response from Gemini
-    if (data && 
-        data.candidates && 
-        data.candidates.length > 0 && 
-        data.candidates[0].content && 
-        data.candidates[0].content.parts && 
-        data.candidates[0].content.parts.length > 0) {
+    if (data &&
+        data.candidates &&
+        data.candidates.length > 0 &&
+        data.candidates[0].content &&
+        data.candidates[0].content.parts &&
+        data.candidates[0].content.parts.length > 0 &&
+        data.candidates[0].content.parts[0].text) {
       return data.candidates[0].content.parts[0].text;
     } else {
       throw new Error("Unexpected response format from Gemini API");
@@ -546,10 +639,15 @@ async function processClaude(filePath: string) {
       ]
     });
 
-    return message.content[0].text;
-  } catch (error) {
+    if (message?.content?.[0]?.text) {
+      return message.content[0].text;
+    } else {
+      throw new Error("Unexpected response format from Claude API");
+    }
+  } catch (error: unknown) {
     console.error('Error processing with Claude:', error);
-    throw new Error(`Claude API error: ${error.message}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`Claude API error: ${errorMessage}`);
   }
 }
 
@@ -598,8 +696,22 @@ async function processOpenRouter(filePath: string) {
     throw new Error(`OpenRouter API error: ${errorText}`);
   }
 
-  const data = await response.json();
-  return data.choices[0].message.content;
+  // Define the expected response type
+  interface OpenRouterResponse {
+    choices?: Array<{
+      message?: {
+        content?: string;
+      };
+    }>;
+  }
+
+  const data = await response.json() as OpenRouterResponse;
+  
+  if (data?.choices?.[0]?.message?.content) {
+    return data.choices[0].message.content;
+  } else {
+    throw new Error("Unexpected response format from OpenRouter API");
+  }
 }
 
 // Extract structured data from OCR text

@@ -5,15 +5,17 @@ import { Button } from "@/components/ui/button";
 import { PlusIcon, Loader2 } from "lucide-react";
 import TripCard from "@/components/cards/trip-card";
 import AddTripModal from "@/components/modals/add-trip-modal";
+import type { Trip } from "@shared/schema"; // Import Trip type
 import AddExpenseModal from "@/components/modals/add-expense-modal";
 import ReceiptViewerModal from "@/components/modals/receipt-viewer-modal";
 
 export default function TripsPage() {
   const { toggleAddTrip } = useModalStore();
   
-  // Fetch trips
-  const { data: trips, isLoading } = useQuery({
+  // Fetch trips and type the data
+  const { data: trips, isLoading } = useQuery<Trip[]>({ // Add Trip[] type
     queryKey: ["/api/trips"],
+    // queryFn is default from queryClient
   });
 
   return (
@@ -25,7 +27,8 @@ export default function TripsPage() {
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6">
           <h1 className="text-2xl font-bold mb-2 md:mb-0">Trips</h1>
           
-          <Button className="bg-secondary hover:bg-emerald-600" onClick={toggleAddTrip}>
+          {/* Use primary button styling for better visibility */}
+          <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={toggleAddTrip}>
             <PlusIcon className="h-4 w-4 mr-2" /> Add Trip
           </Button>
         </div>
@@ -36,8 +39,8 @@ export default function TripsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {trips?.length > 0 ? (
-              trips.map((trip: any) => (
+            {trips && trips.length > 0 ? ( // Check if trips is defined before accessing length
+              trips.map((trip: Trip) => ( // Use Trip type for map parameter
                 <TripCard key={trip.id} trip={trip} />
               ))
             ) : (

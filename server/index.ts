@@ -1,6 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { storage as storagePromise } from "./storage"; // Import the promise
+import { setupAuth } from "./auth"; // Import setupAuth
 
 const app = express();
 app.use(express.json());
@@ -37,8 +39,18 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  const server = await registerRoutes(app);
+  // Await the storage initialization
+  const storage = await storagePromise;
+  console.log("Storage initialized successfully.");
 
+  // Setup auth with the initialized storage and session store
+  // Ensure setupAuth is called BEFORE registerRoutes if routes depend on auth/session
+  setupAuth(app, storage.sessionStore, storage); // Pass storage instance
+  console.log("Auth setup complete.");
+
+  // Register routes, passing the initialized storage
+  const server = await registerRoutes(app, storage); // Pass storage instance
+  console.log("Routes registered.");
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -62,8 +74,7 @@ app.use((req, res, next) => {
   const port = 5000;
   server.listen({
     port,
-    host: "0.0.0.0",
-    reusePort: true,
+    host: "127.0.0.1",
   }, () => {
     log(`serving on port ${port}`);
   });

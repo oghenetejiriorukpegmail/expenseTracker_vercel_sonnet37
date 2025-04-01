@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import Sidebar from "@/components/sidebar";
 import { useModalStore } from "@/lib/store";
 import { format } from "date-fns";
+import type { Trip, Expense } from "@shared/schema"; // Import types
 import { Button } from "@/components/ui/button";
 import { PlusIcon } from "lucide-react";
 import SummaryCard from "@/components/cards/summary-card";
@@ -15,13 +16,13 @@ import ReceiptViewerModal from "@/components/modals/receipt-viewer-modal";
 export default function DashboardPage() {
   const { toggleAddTrip } = useModalStore();
 
-  // Fetch expenses
-  const { data: expenses, isLoading: expensesLoading } = useQuery({
+  // Fetch expenses and type the data
+  const { data: expenses, isLoading: expensesLoading } = useQuery<Expense[]>({
     queryKey: ["/api/expenses"],
   });
 
-  // Fetch trips
-  const { data: trips, isLoading: tripsLoading } = useQuery({
+  // Fetch trips and type the data
+  const { data: trips, isLoading: tripsLoading } = useQuery<Trip[]>({
     queryKey: ["/api/trips"],
   });
 
@@ -29,27 +30,32 @@ export default function DashboardPage() {
   const totals = {
     trips: trips?.length || 0,
     expenses: expenses?.length || 0,
-    spent: expenses ? expenses.reduce((sum: number, expense: any) => sum + expense.cost, 0).toFixed(2) : "0.00",
-    receipts: expenses ? expenses.filter((expense: any) => expense.receiptPath).length : 0
+    // Ensure cost is treated as number for reduction
+    spent: expenses ? expenses.reduce((sum: number, expense: Expense) => sum + (typeof expense.cost === 'number' ? expense.cost : parseFloat(expense.cost)), 0).toFixed(2) : "0.00",
+    receipts: expenses ? expenses.filter((expense: Expense) => expense.receiptPath).length : 0
   };
 
-  // Get recent expenses and trips
-  const recentExpenses = expenses?.slice(0, 4) || [];
-  const recentTrips = trips?.slice(0, 3) || [];
+  // Get recent expenses and trips (ensure data exists before slicing)
+  const recentExpenses = expenses ? expenses.slice(0, 4) : [];
+  const recentTrips = trips ? trips.slice(0, 3) : [];
   
   // Prepare data for charts
   const expensesByCategory = expenses
-    ? expenses.reduce((acc: Record<string, number>, expense: any) => {
-        acc[expense.type] = (acc[expense.type] || 0) + expense.cost;
+    ? expenses.reduce((acc: Record<string, number>, expense: Expense) => {
+        // Ensure cost is treated as number
+        const cost = typeof expense.cost === 'number' ? expense.cost : parseFloat(expense.cost);
+        acc[expense.type] = (acc[expense.type] || 0) + cost;
         return acc;
       }, {})
     : {};
     
-  // Generate trend data (simplified for this example)
+  // Generate trend data
   const trendDataMap = expenses
-    ? expenses.reduce((acc: Record<string, number>, expense: any) => {
+    ? expenses.reduce((acc: Record<string, number>, expense: Expense) => {
         const month = format(new Date(expense.date), 'MMM');
-        acc[month] = (acc[month] || 0) + expense.cost;
+        // Ensure cost is treated as number
+        const cost = typeof expense.cost === 'number' ? expense.cost : parseFloat(expense.cost);
+        acc[month] = (acc[month] || 0) + cost;
         return acc;
       }, {})
     : {};
@@ -71,7 +77,8 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold mb-2 md:mb-0">Dashboard</h1>
           
           <div className="flex flex-wrap gap-2">
-            <Button className="bg-secondary hover:bg-emerald-600" onClick={toggleAddTrip}>
+            {/* Use primary button styling */}
+            <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={toggleAddTrip}>
               <PlusIcon className="h-4 w-4 mr-2" /> Add Trip
             </Button>
           </div>
@@ -148,7 +155,7 @@ export default function DashboardPage() {
                       </td>
                     </tr>
                   ) : recentExpenses.length > 0 ? (
-                    recentExpenses.map((expense: any) => (
+                    recentExpenses.map((expense: Expense) => ( // Add Expense type
                       <tr key={expense.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30">
                         <td className="py-3 px-2 whitespace-nowrap">
                           {format(new Date(expense.date), 'MMM d, yyyy')}
@@ -193,7 +200,7 @@ export default function DashboardPage() {
                   Loading recent trips...
                 </div>
               ) : recentTrips.length > 0 ? (
-                recentTrips.map((trip: any) => (
+                recentTrips.map((trip: Trip) => ( // Add Trip type
                   <TripCard key={trip.id} trip={trip} />
                 ))
               ) : (

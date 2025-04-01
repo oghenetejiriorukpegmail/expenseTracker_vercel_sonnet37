@@ -1,9 +1,9 @@
 import express, { type Express, Request } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
-import { setupAuth } from "./auth";
+// Remove direct storage import: import { storage } from "./storage";
+// Remove setupAuth import as it's handled in index.ts: import { setupAuth } from "./auth";
 import { z } from "zod";
-import { insertTripSchema, insertExpenseSchema } from "@shared/schema";
+import { insertTripSchema, insertExpenseSchema, Expense } from "@shared/schema"; // Import Expense type
 import { upload } from "./middleware/multer-config";
 import { processReceiptWithOCR, testOCR } from "./util/ocr";
 import { promises as fs } from "fs";
@@ -11,15 +11,17 @@ import path from "path";
 import * as XLSX from "xlsx";
 import { createWriteStream } from "fs";
 import multer from "multer";
+import type { IStorage } from "./storage"; // Import the storage interface type
 
 // Define request type with file from multer
 interface MulterRequest extends Request {
   file?: multer.File;
 }
 
-export async function registerRoutes(app: Express): Promise<Server> {
-  // Setup authentication routes
-  setupAuth(app);
+// Update function signature to accept storage instance
+export async function registerRoutes(app: Express, storage: IStorage): Promise<Server> {
+  // Authentication is now setup in index.ts before calling this
+  // setupAuth(app);
 
   // Serve uploaded files
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
@@ -277,8 +279,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const filePath = path.join(process.cwd(), "uploads", req.file.filename);
       
+      // Get file extension and check if it's a PDF
+      const fileExtension = path.extname(req.file.originalname).toLowerCase();
+      const isPdfFile = fileExtension === '.pdf';
+      
       // Get the OCR method from the request or from the user's settings
-      const method = req.body.method || "tesseract";
+      let method = req.body.method || "tesseract";
+      
+      // If it's a PDF and the method is tesseract, recommend using Gemini, OpenAI, or Claude
+      if (isPdfFile && method === "tesseract") {
+        console.log("PDF detected with tesseract method. Recommending Gemini, OpenAI, or Claude for better results.");
+        // We'll continue with tesseract, but the user will see a message in the logs
+      }
+      
+      // Check if we have an API key for the selected method
+      if (method !== "tesseract") {
+        const envVarName = `${method.toUpperCase()}_API_KEY`;
+        const apiKey = process.env[envVarName];
+        
+        if (!apiKey) {
+          console.log(`No API key found for ${method} OCR method`);
+          return res.status(400).json({
+            success: false,
+            error: `No API key configured for ${method}. Please set your API key in the settings page.`
+          });
+        }
+        
+        console.log(`Using ${method} OCR method with API key: ${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`);
+      }
       
       console.log(`Processing receipt with ${method} OCR method`);
       const result = await processReceiptWithOCR(filePath, method);
@@ -342,7 +370,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('- Items:', getItemsArray().length > 0 ? 'Found ' + getItemsArray().length + ' items' : 'No items found');
       
       // Combined response with both the original extracted data and formatted data for form fields
-      const formattedData = {
+      const formattedData: any = {
         ...result,
         // Original extracted data passed through directly for table display
         data: {
@@ -373,6 +401,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           paymentMethod: '',
         }
       };
+      
+      // Add a message for PDF files processed with tesseract
+      if (isPdfFile && method === "tesseract" && (!result.extractedData || Object.keys(result.extractedData).length === 0)) {
+        formattedData.pdfMessage = "PDF processing with Tesseract has limited capabilities. For better results with PDF files, please use Gemini, OpenAI, or Claude OCR methods in the settings page.";
+      }
       
       res.json(formattedData);
     } catch (error) {
@@ -487,8 +520,13 @@ function guessExpenseType(text: string, vendor: string): string {
       // Use ocrApiKey if provided, otherwise use apiKey for backward compatibility
       const actualApiKey = ocrApiKey !== undefined ? ocrApiKey : apiKey;
       
-      // In a real app, we would update the environment variables or store in database
-      // For this example, we'll just return success
+      // Actually set the environment variable based on the OCR method
+      if (ocrMethod && actualApiKey) {
+        // Set the environment variable for the selected OCR method
+        const envVarName = `${ocrMethod.toUpperCase()}_API_KEY`;
+        process.env[envVarName] = actualApiKey;
+        console.log(`Set ${envVarName} environment variable`);
+      }
       
       res.json({ success: true, message: "Settings updated successfully" });
     } catch (error) {
@@ -514,12 +552,12 @@ function guessExpenseType(text: string, vendor: string): string {
       const workbook = XLSX.utils.book_new();
       
       // Format expenses for Excel
-      const excelData = expenses.map(expense => ({
+      const excelData = expenses.map((expense: Expense) => ({ // Add explicit type for expense
         Type: expense.type,
         Date: expense.date,
         Vendor: expense.vendor,
         Location: expense.location,
-        Amount: parseFloat(expense.cost.toString()),
+        Amount: typeof expense.cost === 'number' ? expense.cost : parseFloat(expense.cost), // Handle cost type
         Trip: expense.tripName,
         Comments: expense.comments || "",
         "Has Receipt": expense.receiptPath ? "Yes" : "No"

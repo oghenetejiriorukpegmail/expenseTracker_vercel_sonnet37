@@ -1,35 +1,42 @@
-import { pgTable, text, serial, numeric, timestamp } from "drizzle-orm/pg-core";
+// Import SQLite core functions
+import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
+// Define users table for SQLite
+export const users = sqliteTable("users", {
+  id: integer("id").primaryKey({ autoIncrement: true }), // Use integer primary key
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
+  // Store timestamps as integers (Unix epoch milliseconds) or ISO strings (text)
+  // Using integer mode for simplicity with Date objects
+  createdAt: integer("created_at", { mode: 'timestamp_ms' }).default(new Date()),
 });
 
-export const trips = pgTable("trips", {
-  id: serial("id").primaryKey(),
-  userId: serial("user_id").notNull().references(() => users.id),
+// Define trips table for SQLite
+export const trips = sqliteTable("trips", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  // Ensure foreign key references integer type
+  userId: integer("user_id").notNull().references(() => users.id),
   name: text("name").notNull(),
   description: text("description"),
-  createdAt: timestamp("created_at").defaultNow(),
+  createdAt: integer("created_at", { mode: 'timestamp_ms' }).default(new Date()),
 });
 
-export const expenses = pgTable("expenses", {
-  id: serial("id").primaryKey(),
-  userId: serial("user_id").notNull().references(() => users.id),
+// Define expenses table for SQLite
+export const expenses = sqliteTable("expenses", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull().references(() => users.id),
   type: text("type").notNull(),
-  date: text("date").notNull(),
-  vendor: text("vendor").notNull(), 
+  date: text("date").notNull(), // Keep date as text (YYYY-MM-DD) for simplicity
+  vendor: text("vendor").notNull(),
   location: text("location").notNull(),
-  cost: numeric("cost").notNull(),
+  cost: real("cost").notNull(), // Use real for floating-point numbers in SQLite
   comments: text("comments"),
   tripName: text("trip_name").notNull(),
   receiptPath: text("receipt_path"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: integer("created_at", { mode: 'timestamp_ms' }).default(new Date()),
+  updatedAt: integer("updated_at", { mode: 'timestamp_ms' }).default(new Date()),
 });
 
 // Insert schemas
@@ -41,7 +48,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export const insertTripSchema = createInsertSchema(trips).pick({
   name: true,
   description: true,
-}).omit({ userId: true });
+}); // Removed .omit({ userId: true })
 
 export const insertExpenseSchema = createInsertSchema(expenses).pick({
   type: true,
@@ -51,7 +58,7 @@ export const insertExpenseSchema = createInsertSchema(expenses).pick({
   cost: true,
   comments: true,
   tripName: true,
-}).omit({ userId: true });
+}); // Removed .omit({ userId: true })
 
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;

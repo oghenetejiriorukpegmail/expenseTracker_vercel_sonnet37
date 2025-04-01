@@ -171,13 +171,17 @@ export default function SettingsPage() {
         setExtractedData(data.data || {});
         
         // Check if we got any meaningful data
-        const hasData = data.data && Object.values(data.data).some(val => 
-          val && (typeof val === 'string' && val.trim() !== '') || 
-                (typeof val === 'number') || 
+        const hasData = data.data && Object.values(data.data).some(val =>
+          val && (typeof val === 'string' && val.trim() !== '') ||
+                (typeof val === 'number') ||
                 (Array.isArray(val) && val.length > 0)
         );
         
-        if (hasData) {
+        // Check if there's a PDF message
+        if (data.pdfMessage) {
+          setVerificationStatus("success");
+          setVerificationMessage(data.pdfMessage);
+        } else if (hasData) {
           setVerificationStatus("success");
           setVerificationMessage("Receipt processed successfully! See extracted data below.");
         } else {

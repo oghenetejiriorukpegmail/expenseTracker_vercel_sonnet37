@@ -4,7 +4,8 @@ import { Express } from "express";
 import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { storage } from "./storage";
+// Remove direct storage import: import { storage } from "./storage";
+import type { IStorage } from "./storage"; // Import storage interface type
 import { User as SelectUser } from "@shared/schema";
 
 declare global {
@@ -28,12 +29,13 @@ async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
-export function setupAuth(app: Express) {
+// Update function signature to accept sessionStore and storage instance
+export function setupAuth(app: Express, sessionStore: session.Store, storage: IStorage) {
   const sessionSettings: session.SessionOptions = {
     secret: process.env.SESSION_SECRET || "expense-tracker-secret",
     resave: false,
     saveUninitialized: false,
-    store: storage.sessionStore,
+    store: sessionStore, // Use passed-in sessionStore
     cookie: {
       maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
       httpOnly: true,

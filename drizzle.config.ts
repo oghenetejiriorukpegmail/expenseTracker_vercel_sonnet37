@@ -1,14 +1,15 @@
 import { defineConfig } from "drizzle-kit";
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL, ensure the database is provisioned");
-}
+// No need to check for DATABASE_URL for local SQLite
 
 export default defineConfig({
   out: "./migrations",
   schema: "./shared/schema.ts",
-  dialect: "postgresql",
+  dialect: "sqlite", // Change dialect to sqlite
+  // driver property removed, let drizzle-kit infer or use default
   dbCredentials: {
-    url: process.env.DATABASE_URL,
+    url: "sqlite.db", // Point to a local file
   },
+  verbose: true, // Optional: for more detailed output during migrations
+  strict: true, // Optional: for stricter schema checks
 });
