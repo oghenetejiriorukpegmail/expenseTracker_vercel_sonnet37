@@ -8,8 +8,8 @@ A full-stack web application for tracking personal or business expenses, organiz
 *   **Trip Management:** Create, view, update, and delete trips to categorize expenses.
 *   **Expense Tracking:** Add, view, update, and delete expenses associated with specific trips.
 *   **Receipt Upload:** Upload receipt images (JPG, PNG, GIF) or PDF files for expenses.
-*   **OCR Receipt Processing:** Automatically extract data (vendor, date, total, etc.) from uploaded receipts using various OCR services (Google Gemini, OpenAI Vision, Anthropic Claude, Tesseract.js).
-    *   PDFs are processed directly using vision APIs (Gemini recommended).
+*   **OCR Receipt Processing:** Automatically extract data (vendor, date, total, etc.) from uploaded receipts using various cloud OCR services (Google Gemini, OpenAI Vision, Anthropic Claude, OpenRouter).
+    *   PDFs are processed directly using these vision APIs.
 *   **Persistent Storage:** All user data, trips, expenses, and sessions are stored persistently in an SQLite database (`sqlite.db`) using Drizzle ORM.
 *   **Data Export:** Export expenses for a specific trip or all expenses to an Excel (.xlsx) file.
 *   **Dashboard:** Overview of total trips, expenses, spending, and recent activity. Includes charts for expense breakdown and trends.
@@ -24,7 +24,7 @@ A full-stack web application for tracking personal or business expenses, organiz
 *   **ORM:** Drizzle ORM
 *   **Authentication:** Passport.js, express-session, better-sqlite3-session-store
 *   **File Uploads:** Multer
-*   **OCR:** Google Gemini API, OpenAI Vision API, Anthropic Claude API, Tesseract.js (via node-fetch/external APIs or local processing)
+*   **OCR:** Google Gemini API, OpenAI Vision API, Anthropic Claude API, OpenRouter (via external APIs)
 *   **Excel Export:** XLSX
 
 ## Setup and Running
@@ -38,26 +38,25 @@ A full-stack web application for tracking personal or business expenses, organiz
     ```bash
     npm install
     ```
-3.  **Environment Variables:**
-    *   Create a `.env` file in the project root (optional, but recommended for API keys).
-    *   Add your API keys for the desired OCR services (the app will check `process.env`):
+3.  **Environment Variables (Backend):**
+    *   For the backend server to use external OCR APIs (Gemini, OpenAI, Claude, OpenRouter), you **must** set the corresponding API keys as environment variables when starting the server process. The recommended way is to create a `.env` file in the project root:
         ```dotenv
-        # Example for Gemini
+        # .env file examples (use your actual keys)
         GEMINI_API_KEY=YOUR_GEMINI_API_KEY
-
-        # Example for OpenAI
         OPENAI_API_KEY=YOUR_OPENAI_API_KEY
-
-        # Example for Anthropic Claude
         ANTHROPIC_API_KEY=YOUR_ANTHROPIC_API_KEY
-
-        # Example for OpenRouter
         OPENROUTER_API_KEY=YOUR_OPENROUTER_API_KEY
 
         # Optional: Session Secret (defaults to 'expense-tracker-secret')
-        # SESSION_SECRET=your_super_secret_session_key
+        SESSION_SECRET=your_super_secret_session_key
         ```
-    *   Configure the desired OCR method and enter the corresponding API key in the application's Settings page after logging in.
+    *   The `npm run dev` command (using `tsx`) might not automatically load `.env` files. You might need to use a package like `dotenv` explicitly in `server/index.ts` or prefix your start command (e.g., `dotenv tsx server/index.ts`). Alternatively, set system environment variables.
+4.  **Configure OCR in App Settings (Frontend):**
+    *   After logging in, go to the Settings page.
+    *   Select the desired OCR Method (e.g., "Google Gemini").
+    *   Select the desired OCR Template ("General Receipt" or "Travel Expenses").
+    *   Optionally, enter the API key in the "API Key" field *for frontend testing/verification only*. This key is **not** used for the main expense creation OCR process; the backend uses the keys set via environment variables.
+    *   Click "Save Settings". Your chosen method and template preferences are saved in your browser's local storage and will persist.
 4.  **Run the development server:**
     ```bash
     npm run dev
@@ -68,4 +67,5 @@ A full-stack web application for tracking personal or business expenses, organiz
 ## Notes
 
 *   This project was migrated from an in-memory storage solution to use SQLite for data persistence.
-*   PDF files are processed using vision APIs (Gemini, OpenAI, Claude) directly, bypassing potentially problematic local text extraction libraries.
+*   PDF files are processed using the configured vision APIs (Gemini, OpenAI, Claude, OpenRouter) directly, bypassing potentially problematic local text extraction libraries.
+*   Local OCR (Tesseract.js) functionality has been removed.

@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import Sidebar from "@/components/sidebar";
 import { useModalStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
+import type { Trip, Expense } from "@shared/schema"; // Import types
+import AnimatedPage from "@/components/animated-page"; // Import the wrapper
 import { 
   PlusIcon, 
   Loader2, 
@@ -48,13 +50,13 @@ export default function ExpensesPage() {
   const [sortField, setSortField] = useState<string>("date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   
-  // Fetch expenses
-  const { data: expenses, isLoading: expensesLoading } = useQuery({
+  // Fetch expenses and type the data
+  const { data: expenses, isLoading: expensesLoading } = useQuery<Expense[]>({
     queryKey: ["/api/expenses"],
   });
-  
-  // Fetch trips for filter dropdown
-  const { data: trips, isLoading: tripsLoading } = useQuery({
+
+  // Fetch trips for filter dropdown and type the data
+  const { data: trips, isLoading: tripsLoading } = useQuery<Trip[]>({
     queryKey: ["/api/trips"],
   });
   
@@ -116,7 +118,7 @@ export default function ExpensesPage() {
   // Filter and sort expenses
   const filteredExpenses = expenses
     ? expenses
-        .filter((expense: any) => {
+        .filter((expense: Expense) => { // Add Expense type
           const matchesTrip = tripFilter === "all" || expense.tripName === tripFilter;
           const matchesSearch = searchQuery === "" || 
             expense.vendor.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -124,7 +126,7 @@ export default function ExpensesPage() {
             expense.type.toLowerCase().includes(searchQuery.toLowerCase());
           return matchesTrip && matchesSearch;
         })
-        .sort((a: any, b: any) => {
+        .sort((a: Expense, b: Expense) => { // Add Expense type
           let comparison = 0;
           
           switch (sortField) {
@@ -155,15 +157,19 @@ export default function ExpensesPage() {
       <Sidebar />
       
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-4 md:p-6">
+      <AnimatedPage className="flex-1 overflow-y-auto p-4 md:p-6">
+        {/* Removed extra <main> tag */}
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6">
           <h1 className="text-2xl font-bold mb-2 md:mb-0">Expenses</h1>
-          
+
           <div className="flex flex-wrap gap-2">
-            <Button className="bg-primary hover:bg-blue-600" onClick={toggleAddExpense}>
+            <Button
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={() => toggleAddExpense(tripFilter !== 'all' ? tripFilter : undefined)}
+            >
               <PlusIcon className="h-4 w-4 mr-2" /> Add Expense
             </Button>
-            
+
             <Button variant="outline" onClick={handleExportExpenses}>
               <FileSpreadsheet className="h-4 w-4 mr-2" /> Export to Excel
             </Button>
@@ -183,21 +189,21 @@ export default function ExpensesPage() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              
+
               <Select value={tripFilter} onValueChange={setTripFilter}>
                 <SelectTrigger>
                   <SelectValue placeholder="Filter by trip" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Trips</SelectItem>
-                  {trips?.map((trip: any) => (
+                  {trips?.map((trip: Trip) => ( // Add Trip type
                     <SelectItem key={trip.id} value={trip.name}>
                       {trip.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              
+
               <Select value={sortField} onValueChange={setSortField}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Sort by" />
@@ -223,7 +229,7 @@ export default function ExpensesPage() {
               <table className="min-w-full">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-gray-700/50 border-b dark:border-gray-700">
-                    <th 
+                    <th
                       className="text-left py-3 px-4 font-medium text-xs uppercase text-gray-500 dark:text-gray-400 cursor-pointer"
                       onClick={() => {
                         if (sortField === "date") {
@@ -241,7 +247,7 @@ export default function ExpensesPage() {
                         )}
                       </div>
                     </th>
-                    <th 
+                    <th
                       className="text-left py-3 px-4 font-medium text-xs uppercase text-gray-500 dark:text-gray-400 cursor-pointer"
                       onClick={() => {
                         if (sortField === "type") {
@@ -259,7 +265,7 @@ export default function ExpensesPage() {
                         )}
                       </div>
                     </th>
-                    <th 
+                    <th
                       className="text-left py-3 px-4 font-medium text-xs uppercase text-gray-500 dark:text-gray-400 cursor-pointer"
                       onClick={() => {
                         if (sortField === "vendor") {
@@ -280,10 +286,14 @@ export default function ExpensesPage() {
                     <th className="text-left py-3 px-4 font-medium text-xs uppercase text-gray-500 dark:text-gray-400">
                       Location
                     </th>
+                    {/* Added Comments/Description Column Header */}
+                    <th className="text-left py-3 px-4 font-medium text-xs uppercase text-gray-500 dark:text-gray-400">
+                      Comments/Desc.
+                    </th>
                     <th className="text-left py-3 px-4 font-medium text-xs uppercase text-gray-500 dark:text-gray-400">
                       Trip
                     </th>
-                    <th 
+                    <th
                       className="text-right py-3 px-4 font-medium text-xs uppercase text-gray-500 dark:text-gray-400 cursor-pointer"
                       onClick={() => {
                         if (sortField === "cost") {
@@ -311,7 +321,7 @@ export default function ExpensesPage() {
                 </thead>
                 <tbody>
                   {filteredExpenses.length > 0 ? (
-                    filteredExpenses.map((expense: any) => (
+                    filteredExpenses.map((expense: Expense) => ( // Add Expense type
                       <tr key={expense.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30">
                         <td className="py-3 px-4">
                           {format(new Date(expense.date), "MMM d, yyyy")}
@@ -325,20 +335,25 @@ export default function ExpensesPage() {
                         <td className="py-3 px-4">
                           {expense.location}
                         </td>
+                        {/* Added Comments/Description Column Data */}
+                        <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate" title={expense.comments || ''}>
+                          {expense.comments || '-'}
+                        </td>
                         <td className="py-3 px-4">
                           <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-primary text-xs rounded-full">
                             {expense.tripName}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right font-medium">
-                          ${expense.cost.toFixed(2)}
+                          {/* Ensure cost is number before toFixed */}
+                          ${(typeof expense.cost === 'number' ? expense.cost : parseFloat(expense.cost)).toFixed(2)}
                         </td>
                         <td className="py-3 px-4 text-center">
                           {expense.receiptPath ? (
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="text-blue-500 hover:text-blue-700" 
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-blue-500 hover:text-blue-700"
                               onClick={() => openReceiptViewer(`/uploads/${expense.receiptPath}`)}
                             >
                               <EyeIcon className="h-4 w-4" />
@@ -349,9 +364,9 @@ export default function ExpensesPage() {
                         </td>
                         <td className="py-3 px-4 text-center">
                           <div className="flex justify-center space-x-2">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               className="text-gray-500 hover:text-primary"
                               onClick={() => {
                                 // Edit logic would be here - would normally open modal with prefilled data
@@ -363,12 +378,12 @@ export default function ExpensesPage() {
                             >
                               <EditIcon className="h-4 w-4" />
                             </Button>
-                            
+
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
                                   className="text-gray-500 hover:text-red-500"
                                 >
                                   <Trash2Icon className="h-4 w-4" />
@@ -398,7 +413,7 @@ export default function ExpensesPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={8} className="py-6 text-center text-gray-500 dark:text-gray-400">
+                      <td colSpan={9} className="py-6 text-center text-gray-500 dark:text-gray-400"> {/* Updated colSpan */}
                         {searchQuery || tripFilter !== "all" ? (
                           <>No expenses match your search criteria</>
                         ) : (
@@ -408,7 +423,10 @@ export default function ExpensesPage() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 10c0 5-3.5 8.5-7 11.5-3.5-3-7-6.5-7-11.5a7 7 0 1114 0z" />
                               </svg>
                               <p className="mb-4">No expenses have been added yet</p>
-                              <Button className="bg-primary hover:bg-blue-600" onClick={toggleAddExpense}>
+                              <Button
+                                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                                onClick={() => toggleAddExpense(tripFilter !== 'all' ? tripFilter : undefined)}
+                              >
                                 <PlusIcon className="h-4 w-4 mr-2" /> Add Your First Expense
                               </Button>
                             </div>
@@ -422,7 +440,7 @@ export default function ExpensesPage() {
             </div>
           </div>
         )}
-      </main>
+      </AnimatedPage>
       
       {/* Modals */}
       <AddExpenseModal />

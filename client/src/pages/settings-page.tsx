@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Sidebar from "@/components/sidebar";
-import { useSettingsStore } from "@/lib/store";
+import { useSettingsStore, OcrTemplate } from "@/lib/store"; // Import OcrTemplate type
 import { apiRequest } from "@/lib/queryClient";
 import { 
   Card,
@@ -37,27 +37,32 @@ import {
   Loader2, 
   Upload, 
   CheckCircle, 
-  AlertCircle 
+  AlertCircle
 } from "lucide-react";
+import AnimatedPage from "@/components/animated-page"; // Import the wrapper
+// Line 43 removed
 
 const ocrSettingsSchema = z.object({
   ocrMethod: z.string(),
   ocrApiKey: z.string().optional(),
+  ocrTemplate: z.enum(['travel']), // Add template to schema, only travel allowed
 });
 
 export default function SettingsPage() {
   const { toast } = useToast();
-  const { theme, ocrMethod, ocrApiKey, setOcrMethod, setOcrApiKey, toggleTheme } = useSettingsStore();
+  const { theme, ocrMethod, ocrApiKey, ocrTemplate, setOcrMethod, setOcrApiKey, setOcrTemplate, toggleTheme } = useSettingsStore(); // Get template state/setter
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [verificationStatus, setVerificationStatus] = useState<"none" | "loading" | "success" | "error">("none");
   const [verificationMessage, setVerificationMessage] = useState("");
   const [extractedData, setExtractedData] = useState<{
     date?: string | null;
+    cost?: string | number | null;
+    currency?: string | null;
+    description?: string | null;
+    // Add optional fields
+    type?: string | null;
     vendor?: string | null;
     location?: string | null;
-    total_amount?: string | number | null;
-    type?: string | null;
-    items?: Array<{name: string; price: number}>;
   }>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -66,6 +71,7 @@ export default function SettingsPage() {
     defaultValues: {
       ocrMethod: ocrMethod || "gemini",
       ocrApiKey: ocrApiKey || "",
+      ocrTemplate: ocrTemplate || "travel", // Set default template to travel
     },
   });
   
@@ -76,11 +82,13 @@ export default function SettingsPage() {
       await apiRequest("POST", "/api/update-env", {
         ocrMethod: values.ocrMethod,
         apiKey: values.ocrApiKey,
+        ocrTemplate: values.ocrTemplate,
       });
       
       // Update local state
       setOcrMethod(values.ocrMethod);
       setOcrApiKey(values.ocrApiKey || null);
+      setOcrTemplate(values.ocrTemplate); // Save selected template locally
       
       toast({
         title: "Settings updated",
@@ -139,7 +147,7 @@ export default function SettingsPage() {
     
     const values = form.getValues();
     
-    if (values.ocrMethod !== "tesseract" && (!values.ocrApiKey || values.ocrApiKey.trim() === "")) {
+    if (!values.ocrApiKey || values.ocrApiKey.trim() === "") {
       toast({
         title: "API Key Required",
         description: `Please enter your ${values.ocrMethod} API key first and save your settings.`,
@@ -154,7 +162,9 @@ export default function SettingsPage() {
     
     const formData = new FormData();
     formData.append("receipt", file);
-    
+    // Append the selected template to the form data
+    formData.append("template", values.ocrTemplate); // Use form value (will always be 'travel')
+
     try {
       const response = await fetch("/api/ocr/process", {
         method: "POST",
@@ -209,7 +219,8 @@ export default function SettingsPage() {
       <Sidebar />
       
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-4 md:p-6">
+      <AnimatedPage className="flex-1 overflow-y-auto p-4 md:p-6">
+        {/* Removed extra <main> tag */}
         <h1 className="text-2xl font-bold mb-6">Settings</h1>
 
         <Tabs defaultValue="appearance" className="space-y-6">
@@ -217,7 +228,7 @@ export default function SettingsPage() {
             <TabsTrigger value="appearance">Appearance</TabsTrigger>
             <TabsTrigger value="ocr">OCR Configuration</TabsTrigger>
           </TabsList>
-          
+
           {/* Appearance Tab */}
           <TabsContent value="appearance">
             <Card>
@@ -244,7 +255,7 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           </TabsContent>
-          
+
           {/* OCR Configuration Tab */}
           <TabsContent value="ocr">
             <Card>
@@ -263,8 +274,8 @@ export default function SettingsPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>OCR Method</FormLabel>
-                          <Select 
-                            value={field.value} 
+                          <Select
+                            value={field.value}
                             onValueChange={(value) => {
                               field.onChange(value);
                               // Clear API key when switching to Tesseract
@@ -279,7 +290,7 @@ export default function SettingsPage() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="tesseract">Tesseract.js (Local)</SelectItem>
+                              {/* <SelectItem value="tesseract">Tesseract.js (Local)</SelectItem> */} {/* Removed Tesseract option */}
                               <SelectItem value="gemini">Google Gemini (Recommended)</SelectItem>
                               <SelectItem value="openai">OpenAI Vision</SelectItem>
                               <SelectItem value="claude">Anthropic Claude</SelectItem>
@@ -293,31 +304,57 @@ export default function SettingsPage() {
                         </FormItem>
                       )}
                     />
-                    
-                    {form.watch("ocrMethod") !== "tesseract" && (
-                      <FormField
-                        control={form.control}
-                        name="ocrApiKey"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>API Key</FormLabel>
+
+                    <FormField
+                      control={form.control}
+                      name="ocrApiKey"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>API Key</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="password"
+                              placeholder="Enter your API key"
+                              {...field}
+                              value={field.value || ""}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            {`Enter your ${form.watch("ocrMethod")} API key for OCR processing.`}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Add OCR Template Selector */}
+                    <FormField
+                      control={form.control}
+                      name="ocrTemplate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>OCR Data Extraction Template</FormLabel>
+                          <Select
+                            value={field.value}
+                            onValueChange={(value: OcrTemplate) => field.onChange(value)}
+                          >
                             <FormControl>
-                              <Input 
-                                type="password" 
-                                placeholder="Enter your API key" 
-                                {...field} 
-                                value={field.value || ""}
-                              />
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a template" />
+                              </SelectTrigger>
                             </FormControl>
-                            <FormDescription>
-                              {`Enter your ${form.watch("ocrMethod")} API key for OCR processing.`}
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    )}
-                    
+                            <SelectContent>
+                              <SelectItem value="travel">Travel Expenses</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>
+                            Choose a template to guide the AI on which fields to prioritize during extraction.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
                     <div className="flex space-x-3">
                       <Button type="submit" disabled={isSubmitting}>
                         {isSubmitting ? (
@@ -329,10 +366,10 @@ export default function SettingsPage() {
                           "Save Settings"
                         )}
                       </Button>
-                      
-                      <Button 
-                        type="button" 
-                        variant="outline" 
+
+                      <Button
+                        type="button"
+                        variant="outline"
                         onClick={testOcrSettings}
                         disabled={isSubmitting}
                       >
@@ -355,23 +392,23 @@ export default function SettingsPage() {
                   <h3 className="text-sm font-medium mb-2">Verify OCR Settings</h3>
                   <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-md border border-dashed border-gray-300 dark:border-gray-600">
                     <div className="flex flex-col items-center justify-center space-y-3">
-                      <input 
+                      <input
                         ref={fileInputRef}
-                        type="file" 
-                        accept="image/jpeg,image/png,image/jpg,application/pdf" 
+                        type="file"
+                        accept="image/jpeg,image/png,image/jpg,application/pdf"
                         onChange={handleFileChange}
                         className="hidden"
                       />
-                      
+
                       {verificationStatus === "none" && (
                         <>
                           <Upload className="h-8 w-8 text-gray-500" />
                           <p className="text-sm text-center text-gray-500">
                             Upload a receipt image or PDF to verify your OCR settings are working properly
                           </p>
-                          <Button 
-                            type="button" 
-                            variant="outline" 
+                          <Button
+                            type="button"
+                            variant="outline"
                             onClick={triggerFileInput}
                             disabled={isSubmitting}
                             className="mt-2"
@@ -380,7 +417,7 @@ export default function SettingsPage() {
                           </Button>
                         </>
                       )}
-                      
+
                       {verificationStatus === "loading" && (
                         <>
                           <Loader2 className="h-8 w-8 text-primary animate-spin" />
@@ -389,14 +426,14 @@ export default function SettingsPage() {
                           </p>
                         </>
                       )}
-                      
+
                       {verificationStatus === "success" && (
                         <>
                           <CheckCircle className="h-8 w-8 text-green-500" />
                           <p className="text-sm text-center text-green-500 font-medium">
                             {verificationMessage}
                           </p>
-                          
+
                           {/* Extracted Data Table */}
                           <div className="w-full mt-4 border rounded-md overflow-hidden">
                             <table className="w-full text-sm">
@@ -411,56 +448,47 @@ export default function SettingsPage() {
                                   <td className="px-4 py-2 font-medium">Date</td>
                                   <td className="px-4 py-2">{extractedData.date || "Not detected"}</td>
                                 </tr>
+                                {/* Changed Total Amount to Cost and Currency */}
                                 <tr className="bg-white dark:bg-gray-800">
-                                  <td className="px-4 py-2 font-medium">Vendor</td>
-                                  <td className="px-4 py-2">{extractedData.vendor || "Not detected"}</td>
+                                  <td className="px-4 py-2 font-medium">Cost</td>
+                                  <td className="px-4 py-2">
+                                    {extractedData.cost
+                                      ? typeof extractedData.cost === 'number'
+                                        ? extractedData.cost.toFixed(2) // Display number directly
+                                        : extractedData.cost
+                                      : "Not detected"}
+                                  </td>
                                 </tr>
+                                <tr className="bg-white dark:bg-gray-800">
+                                  <td className="px-4 py-2 font-medium">Currency</td>
+                                  <td className="px-4 py-2">{extractedData.currency || "Not detected"}</td>
+                                </tr>
+                                <tr className="bg-white dark:bg-gray-800">
+                                  <td className="px-4 py-2 font-medium">Description</td>
+                                  <td className="px-4 py-2">{extractedData.description || "Not detected"}</td>
+                                </tr>
+                                {/* Add rows for optional fields */}
                                 <tr className="bg-white dark:bg-gray-800">
                                   <td className="px-4 py-2 font-medium">Type</td>
                                   <td className="px-4 py-2">{extractedData.type || "Not detected"}</td>
                                 </tr>
                                 <tr className="bg-white dark:bg-gray-800">
-                                  <td className="px-4 py-2 font-medium">Location</td>
-                                  <td className="px-4 py-2">{extractedData.location || "Not detected"}</td>
+                                  <td className="px-4 py-2 font-medium">Vendor</td>
+                                  <td className="px-4 py-2">{extractedData.vendor || "Not detected"}</td>
                                 </tr>
                                 <tr className="bg-white dark:bg-gray-800">
-                                  <td className="px-4 py-2 font-medium">Total Amount</td>
-                                  <td className="px-4 py-2">
-                                    {extractedData.total_amount 
-                                      ? typeof extractedData.total_amount === 'number' 
-                                        ? `$${extractedData.total_amount.toFixed(2)}` 
-                                        : extractedData.total_amount
-                                      : "Not detected"}
-                                  </td>
+                                  <td className="px-4 py-2 font-medium">Location</td>
+                                  <td className="px-4 py-2">{extractedData.location || "Not detected"}</td>
                                 </tr>
                               </tbody>
                             </table>
                           </div>
-                          
-                          {extractedData.items && extractedData.items.length > 0 && (
-                            <div className="w-full mt-4 border rounded-md overflow-hidden">
-                              <table className="w-full text-sm">
-                                <thead className="bg-gray-100 dark:bg-gray-700">
-                                  <tr>
-                                    <th className="px-4 py-2 text-left">Item</th>
-                                    <th className="px-4 py-2 text-right">Price</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y">
-                                  {extractedData.items.map((item, index) => (
-                                    <tr key={index} className="bg-white dark:bg-gray-800">
-                                      <td className="px-4 py-2">{item.name}</td>
-                                      <td className="px-4 py-2 text-right">${item.price.toFixed(2)}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                          
-                          <Button 
-                            type="button" 
-                            variant="outline" 
+
+                          {/* Removed Items table as it's not relevant for the travel template */}
+
+                          <Button
+                            type="button"
+                            variant="outline"
                             onClick={triggerFileInput}
                             className="mt-4"
                           >
@@ -468,16 +496,16 @@ export default function SettingsPage() {
                           </Button>
                         </>
                       )}
-                      
+
                       {verificationStatus === "error" && (
                         <>
                           <AlertCircle className="h-8 w-8 text-red-500" />
                           <p className="text-sm text-center text-red-500">
                             {verificationMessage}
                           </p>
-                          <Button 
-                            type="button" 
-                            variant="outline" 
+                          <Button
+                            type="button"
+                            variant="outline"
                             onClick={triggerFileInput}
                             className="mt-2"
                           >
@@ -488,15 +516,11 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </div>
-                
+
                 {/* OCR Methods Information */}
                 <div className="w-full">
                   <h3 className="text-sm font-medium mb-2">OCR Methods</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full text-sm">
-                    <div>
-                      <p className="font-medium">Tesseract.js</p>
-                      <p className="text-gray-500 dark:text-gray-400">Free, runs locally in browser. No API key required but less accurate.</p>
-                    </div>
                     <div>
                       <p className="font-medium">OpenAI Vision</p>
                       <p className="text-gray-500 dark:text-gray-400">Uses OpenAI's GPT-4 Vision. Requires API key with billing setup.</p>
@@ -515,7 +539,7 @@ export default function SettingsPage() {
             </Card>
           </TabsContent>
         </Tabs>
-      </main>
+      </AnimatedPage>
     </div>
   );
 }

@@ -21,6 +21,7 @@ export default function TripCard({ trip }: TripCardProps) {
   const { toast } = useToast();
   const [isExporting, setIsExporting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   
   // Fetch expenses specifically for this trip
   const { data: tripExpenses } = useQuery({
@@ -100,9 +101,20 @@ export default function TripCard({ trip }: TripCardProps) {
     }
   };
   
+  const handleEditTrip = () => {
+    setIsEditing(true);
+    // In a real implementation, this would open a modal for editing the trip
+    // For now, we'll just show a toast message
+    toast({
+      title: "Edit Trip",
+      description: "Trip editing functionality will be implemented in a future update.",
+    });
+    setIsEditing(false);
+  };
+
   const handleAddExpense = () => {
     // Set the selected trip in state and open modal
-    toggleAddExpense();
+    toggleAddExpense(trip.name); // Pass the trip name
     // Ideally we'd pass the trip ID to the modal here, but for simplicity
     // we'll handle that in the modal component itself
   };
@@ -144,7 +156,12 @@ export default function TripCard({ trip }: TripCardProps) {
             </a>
           </Button>
           
-          <Button variant="ghost" size="icon">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleEditTrip}
+            disabled={isEditing}
+          >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>

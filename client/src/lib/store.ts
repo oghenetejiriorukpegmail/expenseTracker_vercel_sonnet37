@@ -2,20 +2,26 @@ import { create } from 'zustand';
 
 type ThemeMode = 'light' | 'dark';
 
+// Define available OCR templates
+export type OcrTemplate = 'travel';
+
 interface SettingsState {
   theme: ThemeMode;
   ocrMethod: string;
   ocrApiKey: string | null;
+  ocrTemplate: OcrTemplate; // Add template state
   setTheme: (theme: ThemeMode) => void;
   toggleTheme: () => void;
   setOcrMethod: (method: string) => void;
   setOcrApiKey: (apiKey: string | null) => void;
+  setOcrTemplate: (template: OcrTemplate) => void; // Add template setter
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
   theme: (localStorage.getItem('theme') as ThemeMode) || 'light',
   ocrMethod: localStorage.getItem('ocrMethod') || 'gemini',
   ocrApiKey: localStorage.getItem('ocrApiKey'),
+  ocrTemplate: (localStorage.getItem('ocrTemplate') as OcrTemplate) || 'travel', // Initialize template to travel by default
   
   setTheme: (theme) => {
     localStorage.setItem('theme', theme);
@@ -53,6 +59,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     }
     set({ ocrApiKey: apiKey });
   },
+  setOcrTemplate: (template) => { // Implement template setter
+    localStorage.setItem('ocrTemplate', template);
+    set({ ocrTemplate: template });
+  },
 }));
 
 interface SidebarState {
@@ -72,7 +82,8 @@ interface ModalState {
   addTripOpen: boolean;
   receiptViewerOpen: boolean;
   currentReceiptUrl: string | null;
-  toggleAddExpense: () => void;
+  defaultTripName: string | null; // Add state for default trip
+  toggleAddExpense: (defaultTrip?: string) => void; // Update signature
   toggleAddTrip: () => void;
   openReceiptViewer: (url: string) => void;
   closeReceiptViewer: () => void;
@@ -84,9 +95,11 @@ export const useModalStore = create<ModalState>((set) => ({
   addTripOpen: false,
   receiptViewerOpen: false,
   currentReceiptUrl: null,
+  defaultTripName: null, // Initialize default trip state
   
-  toggleAddExpense: () => set((state) => ({ 
+  toggleAddExpense: (defaultTrip?: string) => set((state) => ({
     addExpenseOpen: !state.addExpenseOpen,
+    defaultTripName: !state.addExpenseOpen ? (defaultTrip || null) : null, // Set default trip only when opening
     addTripOpen: false,
     receiptViewerOpen: false
   })),
@@ -113,6 +126,7 @@ export const useModalStore = create<ModalState>((set) => ({
     addExpenseOpen: false,
     addTripOpen: false,
     receiptViewerOpen: false,
-    currentReceiptUrl: null
+    currentReceiptUrl: null,
+    defaultTripName: null // Reset default trip on closeAll
   }),
 }));

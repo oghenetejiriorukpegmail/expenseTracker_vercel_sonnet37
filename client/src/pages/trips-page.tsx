@@ -8,6 +8,7 @@ import AddTripModal from "@/components/modals/add-trip-modal";
 import type { Trip } from "@shared/schema"; // Import Trip type
 import AddExpenseModal from "@/components/modals/add-expense-modal";
 import ReceiptViewerModal from "@/components/modals/receipt-viewer-modal";
+import AnimatedPage from "@/components/animated-page"; // Import the wrapper
 
 export default function TripsPage() {
   const { toggleAddTrip } = useModalStore();
@@ -23,10 +24,11 @@ export default function TripsPage() {
       <Sidebar />
       
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-4 md:p-6">
+      <AnimatedPage className="flex-1 overflow-y-auto p-4 md:p-6">
+        {/* Removed extra <main> tag */}
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6">
           <h1 className="text-2xl font-bold mb-2 md:mb-0">Trips</h1>
-          
+
           {/* Use primary button styling for better visibility */}
           <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={toggleAddTrip}>
             <PlusIcon className="h-4 w-4 mr-2" /> Add Trip
@@ -53,7 +55,8 @@ export default function TripsPage() {
                   <p className="max-w-sm mx-auto mb-5">
                     Create your first trip to start tracking expenses. You can organize expenses by trips for better management.
                   </p>
-                  <Button className="bg-secondary hover:bg-emerald-600" onClick={toggleAddTrip}>
+                  {/* Also update this button's styling */}
+                  <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={toggleAddTrip}>
                     <PlusIcon className="h-4 w-4 mr-2" /> Create Your First Trip
                   </Button>
                 </div>
@@ -61,7 +64,7 @@ export default function TripsPage() {
             )}
           </div>
         )}
-      </main>
+      </AnimatedPage>
       
       {/* Modals */}
       <AddTripModal />

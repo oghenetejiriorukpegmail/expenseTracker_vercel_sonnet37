@@ -1,4 +1,5 @@
 import express, { type Express, Request } from "express";
+import { format } from "date-fns"; // Import format function
 import { createServer, type Server } from "http";
 // Remove direct storage import: import { storage } from "./storage";
 // Remove setupAuth import as it's handled in index.ts: import { setupAuth } from "./auth";
@@ -12,10 +13,11 @@ import * as XLSX from "xlsx";
 import { createWriteStream } from "fs";
 import multer from "multer";
 import type { IStorage } from "./storage"; // Import the storage interface type
+import { updateOcrApiKey, setDefaultOcrMethod, loadConfig, saveConfig } from "./config"; // Import config functions
 
 // Define request type with file from multer
 interface MulterRequest extends Request {
-  file?: multer.File;
+  file?: any; // Use any type to avoid TypeScript errors
 }
 
 // Update function signature to accept storage instance
@@ -150,20 +152,45 @@ export async function registerRoutes(app: Express, storage: IStorage): Promise<S
     }
   });
 
-  app.post("/api/expenses", upload.single("receipt"), async (req: MulterRequest, res, next) => {
+  app.post("/api/expenses", (upload as any).single("receipt"), async (req: MulterRequest, res, next) => {
     try {
       if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
       
+      // Load config to check current OCR template
+      const config = loadConfig();
+      const currentTemplate = config.ocrTemplate || 'general';
+      
       // Parse and validate the expense data
-      const expenseData = {
-        type: req.body.type,
+      let expenseData: any = {
         date: req.body.date,
-        vendor: req.body.vendor,
-        location: req.body.location,
         cost: parseFloat(req.body.cost),
-        comments: req.body.comments,
         tripName: req.body.tripName,
+        comments: req.body.comments || '',
       };
+      
+      // Handle template-specific fields
+      if (currentTemplate === 'travel') {
+        // For travel template
+        // Use description as type if type is not provided
+        expenseData.type = req.body.type || req.body.description || 'Travel Expense';
+        
+        // Store description in comments if not empty
+        if (req.body.description && (!expenseData.comments || expenseData.comments.trim() === '')) {
+          expenseData.comments = req.body.description;
+        } else if (req.body.description) {
+          // Append description to comments if both exist
+          expenseData.comments = `${req.body.description}\n\n${expenseData.comments}`;
+        }
+        
+        // Use provided values or defaults for vendor and location
+        expenseData.vendor = req.body.vendor || 'Travel Vendor';
+        expenseData.location = req.body.location || 'Travel Location';
+      } else {
+        // For general template
+        expenseData.type = req.body.type;
+        expenseData.vendor = req.body.vendor;
+        expenseData.location = req.body.location;
+      }
       
       // Add the receipt path if a file was uploaded
       let receiptPath = null;
@@ -184,7 +211,7 @@ export async function registerRoutes(app: Express, storage: IStorage): Promise<S
     }
   });
 
-  app.put("/api/expenses/:id", upload.single("receipt"), async (req: MulterRequest, res, next) => {
+  app.put("/api/expenses/:id", (upload as any).single("receipt"), async (req: MulterRequest, res, next) => {
     try {
       if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
       
@@ -202,16 +229,41 @@ export async function registerRoutes(app: Express, storage: IStorage): Promise<S
         return res.status(403).send("Forbidden");
       }
       
+      // Load config to check current OCR template
+      const config = loadConfig();
+      const currentTemplate = config.ocrTemplate || 'general';
+      
       // Parse and validate the expense data
-      const expenseData = {
-        type: req.body.type,
+      let expenseData: any = {
         date: req.body.date,
-        vendor: req.body.vendor,
-        location: req.body.location,
         cost: parseFloat(req.body.cost),
-        comments: req.body.comments,
         tripName: req.body.tripName,
+        comments: req.body.comments || '',
       };
+      
+      // Handle template-specific fields
+      if (currentTemplate === 'travel') {
+        // For travel template
+        // Use description as type if type is not provided
+        expenseData.type = req.body.type || req.body.description || 'Travel Expense';
+        
+        // Store description in comments if not empty
+        if (req.body.description && (!expenseData.comments || expenseData.comments.trim() === '')) {
+          expenseData.comments = req.body.description;
+        } else if (req.body.description) {
+          // Append description to comments if both exist
+          expenseData.comments = `${req.body.description}\n\n${expenseData.comments}`;
+        }
+        
+        // Use provided values or defaults for vendor and location
+        expenseData.vendor = req.body.vendor || 'Travel Vendor';
+        expenseData.location = req.body.location || 'Travel Location';
+      } else {
+        // For general template
+        expenseData.type = req.body.type;
+        expenseData.vendor = req.body.vendor;
+        expenseData.location = req.body.location;
+      }
       
       // Update receipt path if a new file was uploaded
       let receiptPath = expense.receiptPath;
@@ -269,7 +321,7 @@ export async function registerRoutes(app: Express, storage: IStorage): Promise<S
   });
 
   // OCR processing routes
-  app.post("/api/ocr/process", upload.single("receipt"), async (req: MulterRequest, res, next) => {
+  app.post("/api/ocr/process", (upload as any).single("receipt"), async (req: MulterRequest, res, next) => {
     try {
       if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
       
@@ -283,8 +335,9 @@ export async function registerRoutes(app: Express, storage: IStorage): Promise<S
       const fileExtension = path.extname(req.file.originalname).toLowerCase();
       const isPdfFile = fileExtension === '.pdf';
       
-      // Get the OCR method from the request or from the user's settings
-      let method = req.body.method || "tesseract";
+      // Get the OCR method from the request or from the config
+      const config = loadConfig();
+      let method = req.body.method || config.defaultOcrMethod || "gemini";
       
       // If it's a PDF and the method is tesseract, recommend using Gemini, OpenAI, or Claude
       if (isPdfFile && method === "tesseract") {
@@ -308,8 +361,12 @@ export async function registerRoutes(app: Express, storage: IStorage): Promise<S
         console.log(`Using ${method} OCR method with API key: ${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`);
       }
       
-      console.log(`Processing receipt with ${method} OCR method`);
-      const result = await processReceiptWithOCR(filePath, method);
+      // Read the template from the request body or config
+      const template = req.body.template || config.ocrTemplate || 'general'; // Default to 'general' if not provided
+
+      console.log(`Processing receipt with ${method} OCR method using template: ${template}`);
+      // Pass the template to the processing function
+      const result = await processReceiptWithOCR(filePath, method, template);
       
       // Format the extracted data for form auto-fill
       const extractedData = result.extractedData || {};
@@ -345,51 +402,56 @@ export async function registerRoutes(app: Express, storage: IStorage): Promise<S
         return '';
       };
       
-      const vendor = getExtractedValue('vendor');
-      
-      // Structure data for our settings verification table
+      // Structure data for our settings verification table based on the travel template fields (required + optional)
       const dateValue = getExtractedValue('date');
+      const costValue = getExtractedValue('cost');
+      const currencyValue = getExtractedValue('currency');
+      const descriptionValue = getExtractedValue('description');
+      // Re-add extraction for optional fields
+      const typeValue = getExtractedValue('type');
+      const vendorValue = getExtractedValue('vendor');
       const locationValue = getExtractedValue('location');
-      const typeValue = vendor ? guessExpenseType(result.text || '', vendor) : '';
       
-      // Check for various total amount field names that might be used
-      let totalAmountValue = '';
-      ['total_amount', 'total', 'amount', 'cost', 'price', 'subtotal', 'sub_total', 'grand_total'].forEach(field => {
-        if (!totalAmountValue && extractedData && field in extractedData) {
-          totalAmountValue = String(extractedData[field as keyof typeof extractedData]);
-        }
-      });
+      // Remove old field extractions (vendor, location, type, totalAmountValue loop)
       
       // Add more verbose logging of what we found
-      console.log('Extracted data summary:');
+      // Update console logging to reflect the new fields
+      // Update console logging to include optional fields
+      console.log('Extracted data summary (for verification table):');
       console.log('- Date:', dateValue || 'Not found');
-      console.log('- Vendor:', vendor || 'Not found');
-      console.log('- Location:', locationValue || 'Not found');
+      console.log('- Cost:', costValue || 'Not found');
+      console.log('- Currency:', currencyValue || 'Not found');
+      console.log('- Description:', descriptionValue || 'Not found');
       console.log('- Type:', typeValue || 'Not found');
-      console.log('- Total Amount:', totalAmountValue || 'Not found');
-      console.log('- Items:', getItemsArray().length > 0 ? 'Found ' + getItemsArray().length + ' items' : 'No items found');
+      console.log('- Vendor:', vendorValue || 'Not found');
+      console.log('- Location:', locationValue || 'Not found');
+      
+      // descriptionValue is already extracted above
       
       // Combined response with both the original extracted data and formatted data for form fields
       const formattedData: any = {
         ...result,
-        // Original extracted data passed through directly for table display
+        // Updated data structure for the verification table display, including optional fields
         data: {
           date: dateValue,
-          vendor: vendor,
-          location: locationValue,
-          type: typeValue || guessExpenseType(result.text || '', ''), // Fallback to text-based guess if vendor is empty
-          total_amount: totalAmountValue,
-          items: getItemsArray(),
-        },
-        // Formatted data for form auto-fill (as before)
-        formData: result.success ? {
-          date: dateValue,
-          vendor: vendor,
-          location: locationValue,
-          cost: totalAmountValue,
+          cost: costValue,
+          currency: currencyValue,
+          description: descriptionValue,
           type: typeValue,
-          items: getItemsArray(),
-          paymentMethod: getExtractedValue('paymentMethod'),
+          vendor: vendorValue,
+          location: locationValue,
+        },
+        // Formatted data for form auto-fill
+        formData: result.success ? {
+          // Update formData for potential auto-fill
+          date: dateValue,
+          cost: costValue,
+          currency: currencyValue, // Keep currency in case needed later
+          description: descriptionValue,
+          // Add back type, vendor, location
+          type: typeValue,
+          vendor: vendorValue,
+          location: locationValue,
         } : {
           // Provide empty default values if no data was extracted
           date: '',
@@ -399,6 +461,7 @@ export async function registerRoutes(app: Express, storage: IStorage): Promise<S
           type: 'other',
           items: [],
           paymentMethod: '',
+          description: '',
         }
       };
       
@@ -493,6 +556,40 @@ function guessExpenseType(text: string, vendor: string): string {
   return 'Other';
 }
 
+// Helper function to guess expense purpose for travel template
+function guessExpensePurpose(text: string): string {
+  const lowerText = text.toLowerCase();
+  
+  // Check for business meeting related keywords
+  if (lowerText.includes('meeting') || lowerText.includes('conference') ||
+      lowerText.includes('client') || lowerText.includes('business')) {
+    return 'Business Meeting';
+  }
+  
+  // Check for transportation related keywords
+  if (lowerText.includes('flight') || lowerText.includes('airline') ||
+      lowerText.includes('airport') || lowerText.includes('taxi') ||
+      lowerText.includes('uber') || lowerText.includes('train')) {
+    return 'Transportation';
+  }
+  
+  // Check for accommodation related keywords
+  if (lowerText.includes('hotel') || lowerText.includes('lodging') ||
+      lowerText.includes('stay') || lowerText.includes('room')) {
+    return 'Accommodation';
+  }
+  
+  // Check for meal related keywords
+  if (lowerText.includes('restaurant') || lowerText.includes('meal') ||
+      lowerText.includes('dinner') || lowerText.includes('lunch') ||
+      lowerText.includes('breakfast')) {
+    return 'Meal';
+  }
+  
+  // Default to generic travel expense
+  return 'Travel Expense';
+}
+
   app.post("/api/test-ocr", async (req, res, next) => {
     try {
       if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
@@ -515,17 +612,28 @@ function guessExpenseType(text: string, vendor: string): string {
     try {
       if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
       
-      const { ocrMethod, apiKey, ocrApiKey } = req.body;
+      const { ocrMethod, apiKey, ocrApiKey, ocrTemplate } = req.body;
       
       // Use ocrApiKey if provided, otherwise use apiKey for backward compatibility
       const actualApiKey = ocrApiKey !== undefined ? ocrApiKey : apiKey;
       
-      // Actually set the environment variable based on the OCR method
-      if (ocrMethod && actualApiKey) {
-        // Set the environment variable for the selected OCR method
-        const envVarName = `${ocrMethod.toUpperCase()}_API_KEY`;
-        process.env[envVarName] = actualApiKey;
-        console.log(`Set ${envVarName} environment variable`);
+      // Persist the OCR method and API key in the config file
+      if (ocrMethod) {
+        setDefaultOcrMethod(ocrMethod);
+        console.log(`Set default OCR method to ${ocrMethod}`);
+        
+        if (actualApiKey) {
+          updateOcrApiKey(ocrMethod, actualApiKey);
+          console.log(`Updated API key for ${ocrMethod}`);
+        }
+      }
+      
+      // Store the template preference in the config
+      if (ocrTemplate) {
+        const config = loadConfig();
+        config.ocrTemplate = ocrTemplate;
+        saveConfig(config);
+        console.log(`Set OCR template to ${ocrTemplate}`);
       }
       
       res.json({ success: true, message: "Settings updated successfully" });
@@ -551,23 +659,47 @@ function guessExpenseType(text: string, vendor: string): string {
       // Create a new workbook
       const workbook = XLSX.utils.book_new();
       
-      // Format expenses for Excel
-      const excelData = expenses.map((expense: Expense) => ({ // Add explicit type for expense
-        Type: expense.type,
-        Date: expense.date,
-        Vendor: expense.vendor,
-        Location: expense.location,
-        Amount: typeof expense.cost === 'number' ? expense.cost : parseFloat(expense.cost), // Handle cost type
-        Trip: expense.tripName,
-        Comments: expense.comments || "",
-        "Has Receipt": expense.receiptPath ? "Yes" : "No"
+      // --- Prepare data for the new Excel format ---
+      
+      // 1. Employee and Application Date Info
+      const headerData = [
+        ["Employee Name", req.user!.username], // Use logged-in username
+        ["Application Date", format(new Date(), "MMMM do, yyyy")] // Current date
+      ];
+      
+      // 2. Expense Table Data
+      const expenseTableData = expenses.map((expense: Expense) => ({
+        Date: format(new Date(expense.date), "MM/dd/yyyy"), // Format date
+        Cost: typeof expense.cost === 'number' ? expense.cost : parseFloat(expense.cost), // Ensure cost is number
+        Currency: "CAD", // Hardcoded currency as per example
+        "Description of Travel Expenses": expense.comments || expense.description || expense.type || "", // Use comments, fallback to description/type
       }));
+
+      // --- Create Worksheet ---
       
-      // Create worksheet from data
-      const worksheet = XLSX.utils.json_to_sheet(excelData);
+      // Create worksheet starting with Employee/Date info
+      const worksheet = XLSX.utils.aoa_to_sheet(headerData);
       
+      // Define the starting row for the expense table (leaving space below header)
+      // headerData has 2 rows, add title row, add empty row = start at row 5 (index 4)
+      // Let's simplify and start right after headerData for now. Adjust row index if needed.
+      const expenseTableStartRow = headerData.length + 2; // Add space for title and headers
+
+      // Add the main expense table headers and data below the header info
+      XLSX.utils.sheet_add_json(worksheet, expenseTableData, {
+        origin: `A${expenseTableStartRow}`, // Start table data below header + space
+        skipHeader: false // Include headers from expenseTableData keys
+      });
+
+      // Optional: Add main title (Requires more complex cell manipulation)
+      // Example: worksheet['C3'] = { v: "EXPENSES & TRAVEL REIMBURSEMENT FORM", t: 's', s: { font: { bold: true }, alignment: { horizontal: 'center'} } };
+      // Example: worksheet['!merges'] = [{ s: { r: 2, c: 2 }, e: { r: 2, c: 4 } }]; // Merge C3:E3
+
       // Add worksheet to workbook
       XLSX.utils.book_append_sheet(workbook, worksheet, "Expenses");
+      
+      // Optional: Set column widths (Requires direct worksheet manipulation)
+      // Example: worksheet['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 50 }]; // A, B, C, D widths
       
       // Write to buffer
       const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });

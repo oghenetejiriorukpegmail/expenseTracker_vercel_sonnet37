@@ -136,7 +136,6 @@ export class SqliteStorage implements IStorage {
      //    return { ...result[0], cost: parseFloat(result[0].cost as string) };
      // }
      return result[0]; // Return directly, cost should be number
-     return undefined;
   }
 
   async getExpensesByUserId(userId: number): Promise<Expense[]> {
