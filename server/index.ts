@@ -9,7 +9,20 @@ import { initializeEnvFromConfig } from "./config"; // Import config initializat
 const app = express();
 
 // Add helmet middleware for security headers
-app.use(helmet());
+// Loosen CSP in development to allow Vite HMR and React Refresh
+if (process.env.NODE_ENV !== 'production') {
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        "script-src": ["'self'", "'unsafe-inline'"], // Allow inline scripts for Vite
+        "connect-src": ["'self'", "ws:"], // Allow WebSocket connections for HMR
+      },
+    }
+  }));
+} else {
+  app.use(helmet()); // Use default helmet settings in production
+}
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
