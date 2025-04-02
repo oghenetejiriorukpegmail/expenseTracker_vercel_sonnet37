@@ -857,7 +857,14 @@ function guessExpensePurpose(text: string): string {
 
         // --- Fetch user profile to get first name ---
         const userProfile = await storage.getUserById(req.user!.id);
-        const employeeName = userProfile?.firstName || req.user!.username; // Use firstName or fallback to username
+        // Construct full name, handle missing names, fallback to username
+        const firstName = userProfile?.firstName?.trim() || '';
+        const lastName = userProfile?.lastName?.trim() || '';
+        let fullName = `${firstName} ${lastName}`.trim();
+        if (!fullName) {
+          fullName = req.user!.username; // Fallback to username if no first/last name
+        }
+        const employeeName = fullName; // Keep variable name for simplicity in replacement below
         const applicationDate = new Date(); // Use Date object
 
         // --- Search for and replace placeholders in all cells ---
@@ -868,9 +875,10 @@ function guessExpensePurpose(text: string): string {
               let cellValue = cell.value as string;
               
               // Replace {{full name}} with employee name
+              // Replace {{full name}} with the constructed full name
               if (cellValue.includes('{{full name}}')) {
                 console.log(`Found {{full name}} placeholder in cell ${worksheet.getCell(rowNumber, colNumber).address}`);
-                cell.value = cellValue.replace(/{{full name}}/g, employeeName);
+                cell.value = cellValue.replace(/{{full name}}/g, fullName); // Use fullName
               }
               
               // Handle special case for "Date:___________{{Today's Date}}__________"
@@ -903,8 +911,8 @@ function guessExpensePurpose(text: string): string {
 
         // --- Also populate specific cells as before (for backward compatibility) ---
         // Populate Header Info (Assuming cells B9 and B10 from template image)
-        console.log(`Populating B9 with Employee Name: ${employeeName}`);
-        worksheet.getCell('B9').value = employeeName;
+        console.log(`Populating B9 with Employee Name: ${fullName}`); // Use fullName
+        worksheet.getCell('B9').value = fullName; // Use fullName
         
         console.log(`Populating B10 with Application Date: ${applicationDate}`);
         worksheet.getCell('B10').value = applicationDate;
@@ -915,8 +923,8 @@ function guessExpensePurpose(text: string): string {
         }
 
         // Populate Signature Fields (Assuming B57 and E58)
-        console.log(`Populating B57 (Applicant Signature) with: ${employeeName}`);
-        worksheet.getCell('B57').value = employeeName; // Applicant Signature
+        console.log(`Populating B57 (Applicant Signature) with: ${fullName}`); // Use fullName
+        worksheet.getCell('B57').value = fullName; // Use fullName
         
         console.log(`Populating E58 (Date) with: ${applicationDate}`);
         worksheet.getCell('E58').value = applicationDate; // Date next to Manager Signature
