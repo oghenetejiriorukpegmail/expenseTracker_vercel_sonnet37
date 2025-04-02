@@ -8,19 +8,17 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { UploadCloud } from "lucide-react"; // Import UploadCloud icon
 
+import type { Trip } from "@shared/schema"; // Import the full Trip type
+
 interface TripCardProps {
-  trip: {
-    id: number;
-    name: string;
-    description: string | null; // Allow null description
-    createdAt: string | Date | null; // Allow Date or null from DB type
-  };
+  // Use the imported Trip type, which should include userId
+  trip: Trip;
 }
 
 export default function TripCard({ trip }: TripCardProps) {
   const { toggleAddExpense, toggleEditTrip, toggleBatchUpload } = useModalStore(); // Add toggleBatchUpload
   const { toast } = useToast();
-  const [isExporting, setIsExporting] = useState(false);
+  // const [isExporting, setIsExporting] = useState(false); // Remove isExporting state
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
@@ -45,39 +43,7 @@ export default function TripCard({ trip }: TripCardProps) {
     ? tripExpenses.reduce((sum: number, expense: any) => sum + expense.cost, 0).toFixed(2)
     : "0.00";
   
-  const handleExportTrip = async () => {
-    setIsExporting(true);
-    try {
-      const response = await fetch(`/api/export-expenses?tripName=${encodeURIComponent(trip.name)}`, {
-        credentials: "include",
-      });
-      
-      if (!response.ok) throw new Error("Failed to export expenses");
-      
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = `${trip.name}-expenses-${format(new Date(), "yyyy-MM-dd")}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(downloadUrl);
-      a.remove();
-      
-      toast({
-        title: "Export successful",
-        description: "Trip expenses have been exported to Excel.",
-      });
-    } catch (error) {
-      toast({
-        title: "Export failed",
-        description: error instanceof Error ? error.message : "Unknown error occurred",
-        variant: "destructive",
-      });
-    } finally {
-      setIsExporting(false);
-    }
-  };
+  // Remove the handleExportTrip function entirely
   
   const handleDeleteTrip = async () => {
     setIsDeleting(true);
@@ -205,17 +171,26 @@ export default function TripCard({ trip }: TripCardProps) {
             Add Expense
           </Button>
           
-          <Button 
-            size="sm" 
-            variant="outline" 
-            className="px-2.5 py-1 text-xs" 
-            onClick={handleExportTrip}
-            disabled={isExporting || expenseCount === 0}
+          {/* Change Button to an <a> tag styled as a button */}
+          <Button
+            size="sm"
+            variant="outline"
+            className={`px-2.5 py-1 text-xs ${expenseCount === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+            asChild // Important: Allows Button styling on the child <a> tag
+            disabled={expenseCount === 0} // Disable visually if no expenses
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            {isExporting ? "Exporting..." : "Export"}
+            <a
+              href={expenseCount > 0 ? `/api/export-expenses?tripName=${encodeURIComponent(trip.name)}` : undefined}
+              download // Let the browser handle the filename from Content-Disposition
+              target="_blank" // Optional: attempt to open in new tab/window
+              rel="noopener noreferrer"
+              onClick={(e) => { if (expenseCount === 0) e.preventDefault(); }} // Prevent click if disabled
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export
+            </a>
           </Button>
           {/* Add Batch Upload Button */}
           <Button
