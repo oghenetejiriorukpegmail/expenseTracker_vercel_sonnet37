@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import helmet from "helmet"; // Import helmet
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { storage as storagePromise } from "./storage"; // Import the promise
@@ -6,6 +7,10 @@ import { setupAuth } from "./auth"; // Import setupAuth
 import { initializeEnvFromConfig } from "./config"; // Import config initialization
 
 const app = express();
+
+// Add helmet middleware for security headers
+app.use(helmet());
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
