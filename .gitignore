@@ -24,3 +24,6 @@ sqlite.db-shm # SQLite shared memory file
 ~$*.xlsx
 ~$*.docx
 ~$*.pptx
+
+# Configuration files (should use environment variables or examples)
+app-config.json
