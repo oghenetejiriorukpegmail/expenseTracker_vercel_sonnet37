@@ -19,3 +19,8 @@ sqlite.db-shm # SQLite shared memory file
 # Uploaded files
 /uploads/
 !.env.example # Keep example env file if it exists
+
+# Temporary Office files
+~$*.xlsx
+~$*.docx
+~$*.pptx

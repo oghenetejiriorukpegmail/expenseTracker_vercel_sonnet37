@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8a585db9-054f-41c5-86e1-05c4be374585",
+  "id": "66e47612-d502-4179-bddb-73f2635efb3f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "expenses": {
@@ -83,7 +83,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'\"2025-04-01T05:20:39.723Z\"'"
+          "default": "'\"2025-04-02T01:22:27.396Z\"'"
         },
         "updated_at": {
           "name": "updated_at",
@@ -91,7 +91,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'\"2025-04-01T05:20:39.723Z\"'"
+          "default": "'\"2025-04-02T01:22:27.396Z\"'"
         }
       },
       "indexes": {},
@@ -151,7 +151,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'\"2025-04-01T05:20:39.723Z\"'"
+          "default": "'\"2025-04-02T01:22:27.396Z\"'"
         }
       },
       "indexes": {},
@@ -198,13 +198,52 @@
           "notNull": true,
           "autoincrement": false
         },
+        "first_name": {
+          "name": "first_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "last_name": {
+          "name": "last_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "phone_number": {
+          "name": "phone_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "bio": {
+          "name": "bio",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'\"2025-04-01T05:20:39.722Z\"'"
+          "default": "'\"2025-04-02T01:22:27.395Z\"'"
         }
       },
       "indexes": {
@@ -212,6 +251,13 @@
           "name": "users_username_unique",
           "columns": [
             "username"
+          ],
+          "isUnique": true
+        },
+        "users_email_unique": {
+          "name": "users_email_unique",
+          "columns": [
+            "email"
           ],
           "isUnique": true
         }

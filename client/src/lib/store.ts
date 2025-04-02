@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { Trip, Expense } from "@shared/schema"; // Import Trip and Expense types
 
 type ThemeMode = 'light' | 'dark';
 
@@ -80,11 +81,22 @@ export const useSidebarStore = create<SidebarState>((set) => ({
 interface ModalState {
   addExpenseOpen: boolean;
   addTripOpen: boolean;
+  editTripOpen: boolean;
+  editingTrip: Trip | null;
+  editExpenseOpen: boolean; // Add state for edit expense modal
+  editingExpense: Expense | null;
+  batchUploadOpen: boolean; // Add state for batch upload modal
+  batchUploadTripId: number | null;
+  batchUploadTripName: string | null; // Add state for target trip name
   receiptViewerOpen: boolean;
   currentReceiptUrl: string | null;
-  defaultTripName: string | null; // Add state for default trip
-  toggleAddExpense: (defaultTrip?: string) => void; // Update signature
+  defaultTripName: string | null;
+  toggleAddExpense: (defaultTrip?: string) => void;
   toggleAddTrip: () => void;
+  toggleEditTrip: (trip?: Trip | null) => void;
+  toggleEditExpense: (expense?: Expense | null) => void;
+  toggleBatchUpload: (tripData?: { id: number; name: string } | null) => void; // Update signature
+  // Duplicate toggleBatchUpload removed
   openReceiptViewer: (url: string) => void;
   closeReceiptViewer: () => void;
   closeAll: () => void;
@@ -93,13 +105,57 @@ interface ModalState {
 export const useModalStore = create<ModalState>((set) => ({
   addExpenseOpen: false,
   addTripOpen: false,
+  editTripOpen: false,
+  editingTrip: null,
+  editExpenseOpen: false, // Initialize edit expense state
+  editingExpense: null,
+  batchUploadOpen: false, // Initialize batch upload state
+  batchUploadTripId: null,
+  batchUploadTripName: null, // Initialize batch upload trip name
   receiptViewerOpen: false,
   currentReceiptUrl: null,
-  defaultTripName: null, // Initialize default trip state
+  defaultTripName: null,
   
   toggleAddExpense: (defaultTrip?: string) => set((state) => ({
     addExpenseOpen: !state.addExpenseOpen,
     defaultTripName: !state.addExpenseOpen ? (defaultTrip || null) : null, // Set default trip only when opening
+    addTripOpen: false,
+    receiptViewerOpen: false
+  })),
+
+  toggleEditExpense: (expense?: Expense | null) => set((state) => {
+    const newOpenState = !state.editExpenseOpen;
+    console.log("Toggling Edit Expense Modal:", {
+      currentOpenState: state.editExpenseOpen,
+      newOpenState: newOpenState,
+      expenseId: expense?.id
+    }); // Log state change
+    return {
+      editExpenseOpen: newOpenState,
+      editingExpense: newOpenState ? expense || null : null, // Set expense only when opening
+      addExpenseOpen: false,
+      addTripOpen: false,
+      editTripOpen: false,
+      receiptViewerOpen: false
+    };
+  }),
+
+  toggleBatchUpload: (tripData?: { id: number; name: string } | null) => set((state) => ({
+    batchUploadOpen: !state.batchUploadOpen,
+    batchUploadTripId: !state.batchUploadOpen ? tripData?.id || null : null, // Set tripId only when opening
+    batchUploadTripName: !state.batchUploadOpen ? tripData?.name || null : null, // Set tripName only when opening
+    // Close other modals when opening batch upload
+    addExpenseOpen: false,
+    addTripOpen: false,
+    editTripOpen: false,
+    editExpenseOpen: false,
+    receiptViewerOpen: false
+  })),
+  
+  toggleEditTrip: (trip?: Trip | null) => set((state) => ({
+    editTripOpen: !state.editTripOpen,
+    editingTrip: !state.editTripOpen ? trip || null : null, // Set trip only when opening
+    addExpenseOpen: false,
     addTripOpen: false,
     receiptViewerOpen: false
   })),
@@ -125,8 +181,15 @@ export const useModalStore = create<ModalState>((set) => ({
   closeAll: () => set({
     addExpenseOpen: false,
     addTripOpen: false,
+    editTripOpen: false,
+    editingTrip: null,
+    editExpenseOpen: false,
+    editingExpense: null,
+    batchUploadOpen: false, // Reset batch upload state on closeAll
+    batchUploadTripId: null,
+    batchUploadTripName: null, // Reset batch upload trip name on closeAll
     receiptViewerOpen: false,
     currentReceiptUrl: null,
-    defaultTripName: null // Reset default trip on closeAll
+    defaultTripName: null
   }),
 }));

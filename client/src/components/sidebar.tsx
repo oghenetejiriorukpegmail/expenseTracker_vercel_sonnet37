@@ -121,6 +121,23 @@ export default function Sidebar() {
             <span>Expenses</span>
           </div>
           
+          {/* Profile Link */}
+          <div
+            className={`flex items-center p-3 rounded-lg cursor-pointer ${
+              isActiveRoute("/profile")
+                ? "text-primary bg-blue-50 dark:bg-blue-900/20"
+                : "hover:bg-gray-100 dark:hover:bg-gray-700"
+            }`}
+            onClick={() => {
+              window.location.href = "/profile";
+              close();
+            }}
+          >
+            <UserIcon className="h-5 w-5 mr-3" />
+            <span>Profile</span>
+          </div>
+
+          {/* Settings Link */}
           <div
             className={`flex items-center p-3 rounded-lg cursor-pointer ${
               isActiveRoute("/settings")

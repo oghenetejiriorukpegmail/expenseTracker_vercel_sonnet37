@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react"; // Import useEffect
 import { useQuery } from "@tanstack/react-query";
 import Sidebar from "@/components/sidebar";
 import { useModalStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import type { Trip, Expense } from "@shared/schema"; // Import types
+import { useLocation } from "wouter"; // Import useLocation
 import AnimatedPage from "@/components/animated-page"; // Import the wrapper
 import { 
   PlusIcon, 
@@ -43,7 +44,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export default function ExpensesPage() {
-  const { toggleAddExpense, openReceiptViewer } = useModalStore();
+  const { toggleAddExpense, openReceiptViewer, toggleEditExpense } = useModalStore(); // Add toggleEditExpense
   const { toast } = useToast();
   const [tripFilter, setTripFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -59,6 +60,19 @@ export default function ExpensesPage() {
   const { data: trips, isLoading: tripsLoading } = useQuery<Trip[]>({
     queryKey: ["/api/trips"],
   });
+
+  // Effect to read trip filter from URL on initial load
+  const [location] = useLocation(); // Get location hook
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tripNameFromUrl = params.get("trip");
+    if (tripNameFromUrl) {
+      setTripFilter(decodeURIComponent(tripNameFromUrl));
+    }
+    // We only want this to run once on mount, so dependencies are empty
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array ensures it runs only once
+  // Extraneous closing bracket removed
   
   const handleExportExpenses = async () => {
     try {
@@ -369,11 +383,8 @@ export default function ExpensesPage() {
                               size="sm"
                               className="text-gray-500 hover:text-primary"
                               onClick={() => {
-                                // Edit logic would be here - would normally open modal with prefilled data
-                                toast({
-                                  title: "Edit feature",
-                                  description: "Edit functionality would be implemented here.",
-                                });
+                                console.log("Edit button clicked for expense ID:", expense.id); // Log click
+                                toggleEditExpense(expense);
                               }}
                             >
                               <EditIcon className="h-4 w-4" />

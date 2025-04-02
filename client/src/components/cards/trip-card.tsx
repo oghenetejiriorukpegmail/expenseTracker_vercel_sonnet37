@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useModalStore } from "@/lib/store";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { UploadCloud } from "lucide-react"; // Import UploadCloud icon
 
 interface TripCardProps {
   trip: {
@@ -17,7 +18,7 @@ interface TripCardProps {
 }
 
 export default function TripCard({ trip }: TripCardProps) {
-  const { toggleAddExpense } = useModalStore();
+  const { toggleAddExpense, toggleEditTrip, toggleBatchUpload } = useModalStore(); // Add toggleBatchUpload
   const { toast } = useToast();
   const [isExporting, setIsExporting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -101,16 +102,7 @@ export default function TripCard({ trip }: TripCardProps) {
     }
   };
   
-  const handleEditTrip = () => {
-    setIsEditing(true);
-    // In a real implementation, this would open a modal for editing the trip
-    // For now, we'll just show a toast message
-    toast({
-      title: "Edit Trip",
-      description: "Trip editing functionality will be implemented in a future update.",
-    });
-    setIsEditing(false);
-  };
+  // Removed previous placeholder handleEditTrip function
 
   const handleAddExpense = () => {
     // Set the selected trip in state and open modal
@@ -159,8 +151,8 @@ export default function TripCard({ trip }: TripCardProps) {
           <Button
             variant="ghost"
             size="icon"
-            onClick={handleEditTrip}
-            disabled={isEditing}
+            onClick={() => toggleEditTrip(trip)} // Call toggleEditTrip with trip data
+            // disabled={isEditing} // Remove disabled state if not needed
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -224,6 +216,16 @@ export default function TripCard({ trip }: TripCardProps) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
             {isExporting ? "Exporting..." : "Export"}
+          </Button>
+          {/* Add Batch Upload Button */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="px-2.5 py-1 text-xs"
+            onClick={() => toggleBatchUpload({ id: trip.id, name: trip.name })} // Pass trip id and name
+          >
+             <UploadCloud className="h-3.5 w-3.5 mr-1" />
+             Batch Upload
           </Button>
         </div>
       </div>

@@ -1,11 +1,11 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react"; // Keep useEffect for now, might be needed by other parts later, or remove if truly unused
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Sidebar from "@/components/sidebar";
 import { useSettingsStore, OcrTemplate } from "@/lib/store"; // Import OcrTemplate type
 import { apiRequest } from "@/lib/queryClient";
-import { 
+import {
   Card,
   CardContent,
   CardDescription,
@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
+import {
   Form,
   FormControl,
   FormDescription,
@@ -33,10 +33,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { 
-  Loader2, 
-  Upload, 
-  CheckCircle, 
+import {
+  Loader2,
+  Upload,
+  CheckCircle,
   AlertCircle
 } from "lucide-react";
 import AnimatedPage from "@/components/animated-page"; // Import the wrapper
@@ -48,10 +48,12 @@ const ocrSettingsSchema = z.object({
   ocrTemplate: z.enum(['travel']), // Add template to schema, only travel allowed
 });
 
+// Removed profile schema and type
+
 export default function SettingsPage() {
   const { toast } = useToast();
   const { theme, ocrMethod, ocrApiKey, ocrTemplate, setOcrMethod, setOcrApiKey, setOcrTemplate, toggleTheme } = useSettingsStore(); // Get template state/setter
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false); // Shared submitting state for now
   const [verificationStatus, setVerificationStatus] = useState<"none" | "loading" | "success" | "error">("none");
   const [verificationMessage, setVerificationMessage] = useState("");
   const [extractedData, setExtractedData] = useState<{
@@ -65,8 +67,11 @@ export default function SettingsPage() {
     location?: string | null;
   }>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const form = useForm<z.infer<typeof ocrSettingsSchema>>({
+
+  // Removed profile state
+
+  // OCR Settings Form
+  const ocrForm = useForm<z.infer<typeof ocrSettingsSchema>>({
     resolver: zodResolver(ocrSettingsSchema),
     defaultValues: {
       ocrMethod: ocrMethod || "gemini",
@@ -74,25 +79,30 @@ export default function SettingsPage() {
       ocrTemplate: ocrTemplate || "travel", // Set default template to travel
     },
   });
-  
-  async function onSubmit(values: z.infer<typeof ocrSettingsSchema>) {
+
+  // Removed profile form instance
+
+  // Removed profile fetch useEffect
+
+  // Submit handler for OCR settings
+  async function onOcrSubmit(values: z.infer<typeof ocrSettingsSchema>) {
     setIsSubmitting(true);
     try {
       // Save settings to backend
       await apiRequest("POST", "/api/update-env", {
         ocrMethod: values.ocrMethod,
-        apiKey: values.ocrApiKey,
+        apiKey: values.ocrApiKey, // Use apiKey for backend compatibility for now
         ocrTemplate: values.ocrTemplate,
       });
-      
+
       // Update local state
       setOcrMethod(values.ocrMethod);
       setOcrApiKey(values.ocrApiKey || null);
       setOcrTemplate(values.ocrTemplate); // Save selected template locally
-      
+
       toast({
         title: "Settings updated",
-        description: "Your settings have been saved successfully.",
+        description: "Your OCR settings have been saved successfully.",
       });
     } catch (error) {
       toast({
@@ -105,22 +115,25 @@ export default function SettingsPage() {
     }
   }
 
+  // Removed profile submit handler
+
+
   async function testOcrSettings() {
-    const values = form.getValues();
+    const values = ocrForm.getValues();
     setIsSubmitting(true);
-    
+
     try {
       const response = await apiRequest("POST", "/api/test-ocr", {
         method: values.ocrMethod,
-        apiKey: values.ocrApiKey,
+        apiKey: values.ocrApiKey, // Use apiKey for backend compatibility
       });
-      
+
       const data = await response.json();
-      
+
       toast({
         title: "OCR Test Result",
-        description: data.success 
-          ? "OCR configuration tested successfully!" 
+        description: data.success
+          ? "OCR configuration tested successfully!"
           : `Test failed: ${data.message}`,
         variant: data.success ? "default" : "destructive",
       });
@@ -134,19 +147,19 @@ export default function SettingsPage() {
       setIsSubmitting(false);
     }
   }
-  
+
   const triggerFileInput = () => {
     if (fileInputRef.current) {
       fileInputRef.current.click();
     }
   };
-  
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
-    const values = form.getValues();
-    
+
+    const values = ocrForm.getValues();
+
     if (!values.ocrApiKey || values.ocrApiKey.trim() === "") {
       toast({
         title: "API Key Required",
@@ -155,11 +168,11 @@ export default function SettingsPage() {
       });
       return;
     }
-    
+
     setVerificationStatus("loading");
     setVerificationMessage("Processing receipt...");
     setExtractedData({}); // Clear previous data
-    
+
     const formData = new FormData();
     formData.append("receipt", file);
     // Append the selected template to the form data
@@ -170,23 +183,23 @@ export default function SettingsPage() {
         method: "POST",
         body: formData,
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
         // Log the full response to see what we're getting
         console.log("OCR Response:", data);
-        
+
         // Always set the data regardless of whether it seems empty
         setExtractedData(data.data || {});
-        
+
         // Check if we got any meaningful data
         const hasData = data.data && Object.values(data.data).some(val =>
           val && (typeof val === 'string' && val.trim() !== '') ||
                 (typeof val === 'number') ||
                 (Array.isArray(val) && val.length > 0)
         );
-        
+
         // Check if there's a PDF message
         if (data.pdfMessage) {
           setVerificationStatus("success");
@@ -207,7 +220,7 @@ export default function SettingsPage() {
       setVerificationStatus("error");
       setVerificationMessage(error instanceof Error ? error.message : "Failed to process receipt");
     }
-    
+
     // Reset the file input
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -217,17 +230,21 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col md:flex-row h-screen">
       <Sidebar />
-      
+
       {/* Main Content */}
       <AnimatedPage className="flex-1 overflow-y-auto p-4 md:p-6">
         {/* Removed extra <main> tag */}
         <h1 className="text-2xl font-bold mb-6">Settings</h1>
 
-        <Tabs defaultValue="appearance" className="space-y-6">
+        <Tabs defaultValue="appearance" className="space-y-6"> {/* Changed default to appearance */}
           <TabsList>
+            {/* Removed Profile Tab Trigger */}
             <TabsTrigger value="appearance">Appearance</TabsTrigger>
             <TabsTrigger value="ocr">OCR Configuration</TabsTrigger>
           </TabsList>
+
+          {/* Removed Profile Tab Content */}
+
 
           {/* Appearance Tab */}
           <TabsContent value="appearance">
@@ -266,10 +283,10 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <Form {...ocrForm}> {/* Use ocrForm here */}
+                  <form onSubmit={ocrForm.handleSubmit(onOcrSubmit)} className="space-y-6"> {/* Use ocrForm here */}
                     <FormField
-                      control={form.control}
+                      control={ocrForm.control} // Use ocrForm here
                       name="ocrMethod"
                       render={({ field }) => (
                         <FormItem>
@@ -280,7 +297,7 @@ export default function SettingsPage() {
                               field.onChange(value);
                               // Clear API key when switching to Tesseract
                               if (value === "tesseract") {
-                                form.setValue("ocrApiKey", "");
+                                ocrForm.setValue("ocrApiKey", ""); // Use ocrForm here
                               }
                             }}
                           >
@@ -306,7 +323,7 @@ export default function SettingsPage() {
                     />
 
                     <FormField
-                      control={form.control}
+                      control={ocrForm.control} // Use ocrForm here
                       name="ocrApiKey"
                       render={({ field }) => (
                         <FormItem>
@@ -320,7 +337,7 @@ export default function SettingsPage() {
                             />
                           </FormControl>
                           <FormDescription>
-                            {`Enter your ${form.watch("ocrMethod")} API key for OCR processing.`}
+                            {`Enter your ${ocrForm.watch("ocrMethod")} API key for OCR processing.`} {/* Use ocrForm here */}
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -329,7 +346,7 @@ export default function SettingsPage() {
 
                     {/* Add OCR Template Selector */}
                     <FormField
-                      control={form.control}
+                      control={ocrForm.control} // Use ocrForm here
                       name="ocrTemplate"
                       render={({ field }) => (
                         <FormItem>
@@ -363,7 +380,7 @@ export default function SettingsPage() {
                             Saving...
                           </>
                         ) : (
-                          "Save Settings"
+                          "Save OCR Settings" // Changed button text
                         )}
                       </Button>
 
@@ -534,12 +551,12 @@ export default function SettingsPage() {
                       <p className="text-gray-500 dark:text-gray-400">Anthropic's Claude model with vision capabilities.</p>
                     </div>
                   </div>
-                </div>
-              </CardFooter>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </AnimatedPage>
-    </div>
+                </div> {/* Closing the OCR Methods Information div */}
+              </CardFooter> {/* Closing the OCR CardFooter */}
+            </Card> {/* Closing the OCR Card */}
+          </TabsContent> {/* Closing the OCR TabsContent */}
+        </Tabs> {/* Closing the main Tabs component */}
+      </AnimatedPage> {/* Closing the AnimatedPage component */}
+    </div> // Closing the root div
   );
 }

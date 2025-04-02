@@ -5,6 +5,7 @@ A full-stack web application for tracking personal or business expenses, organiz
 ## Features
 
 *   **User Authentication:** Secure user registration and login using Passport.js and persistent sessions stored in SQLite.
+*   **User Profile:** View and update user information including First Name, Last Name, Phone Number, Email, and Bio on the dedicated Profile page. Change account password.
 *   **Trip Management:** Create, view, update, and delete trips to categorize expenses.
 *   **Expense Tracking:** Add, view, update, and delete expenses associated with specific trips.
 *   **Receipt Upload:** Upload receipt images (JPG, PNG, GIF) or PDF files for expenses.
@@ -12,7 +13,7 @@ A full-stack web application for tracking personal or business expenses, organiz
     *   PDFs are processed directly using these vision APIs.
 *   **Persistent Storage:** All user data, trips, expenses, and sessions are stored persistently in an SQLite database (`sqlite.db`) using Drizzle ORM.
 *   **Data Export:** Export expenses for a specific trip or all expenses to an Excel (.xlsx) file.
-*   **Dashboard:** Overview of total trips, expenses, spending, and recent activity. Includes charts for expense breakdown and trends.
+*   **Dashboard:** Personalized welcome message ("Welcome [First Name]!"). Overview of total trips, expenses, spending, and recent activity. Includes charts for expense breakdown and trends.
 *   **Responsive UI:** Built with Tailwind CSS and Shadcn UI for a clean and responsive user interface.
 *   **Light/Dark Mode:** Theme toggling available in settings.
 

@@ -8,6 +8,11 @@ export const users = sqliteTable("users", {
   id: integer("id").primaryKey({ autoIncrement: true }), // Use integer primary key
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  firstName: text("first_name").notNull().default(''), // Existing firstName
+  lastName: text("last_name").notNull().default(''), // Add lastName, default to empty string
+  phoneNumber: text("phone_number").notNull().default(''), // Add phoneNumber, default to empty string
+  email: text("email").notNull().unique().default(''), // Existing email
+  bio: text("bio"), // Existing optional bio
   // Store timestamps as integers (Unix epoch milliseconds) or ISO strings (text)
   // Using integer mode for simplicity with Date objects
   createdAt: integer("created_at", { mode: 'timestamp_ms' }).default(new Date()),
@@ -43,6 +48,11 @@ export const expenses = sqliteTable("expenses", {
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+  firstName: true, // Existing firstName
+  lastName: true, // Include lastName in insert schema
+  phoneNumber: true, // Include phoneNumber in insert schema
+  email: true, // Existing email
+  // bio is optional, not included by default
 });
 
 export const insertTripSchema = createInsertSchema(trips).pick({

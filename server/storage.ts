@@ -8,9 +8,12 @@ const MemoryStore = createMemoryStore(session);
 // Define the storage interface
 export interface IStorage {
   // User methods
-  getUser(id: number): Promise<User | undefined>;
+  getUserById(id: number): Promise<User | undefined>; // Renamed from getUser
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>; // Add getUserByEmail
   createUser(user: InsertUser): Promise<User>;
+  updateUserProfile(userId: number, profileData: { firstName: string; email: string; bio?: string | null }): Promise<User | undefined>; // Add updateUserProfile
+  updateUserPassword(userId: number, newPasswordHash: string): Promise<void>; // Add updateUserPassword
   
   // Trip methods
   getTrip(id: number): Promise<Trip | undefined>;

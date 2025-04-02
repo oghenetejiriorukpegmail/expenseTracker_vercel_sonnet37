@@ -52,7 +52,7 @@ export class SqliteStorage implements IStorage {
   }
 
   // --- User methods ---
-  async getUser(id: number): Promise<User | undefined> {
+  async getUserById(id: number): Promise<User | undefined> { // Renamed from getUser
     // Use prepared statements for potentially better performance
     // const prepared = this.db.select().from(schema.users).where(eq(schema.users.id, sql.placeholder('id'))).prepare();
     // const result = await prepared.execute({ id });
@@ -72,6 +72,54 @@ export class SqliteStorage implements IStorage {
     // Ensure all required fields for InsertUser are provided if not handled by DB defaults
     const result = await this.db.insert(schema.users).values(userData).returning();
     return result[0];
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    // Ensure case-insensitive comparison if needed
+    const result = await this.db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
+    return result[0];
+  }
+
+  async updateUserProfile(userId: number, profileData: { firstName: string; lastName?: string | null; phoneNumber?: string | null; email: string; bio?: string | null }): Promise<User | undefined> {
+    // Construct the update object dynamically to only include provided fields
+    const updateData: Partial<typeof schema.users.$inferInsert> = {};
+    if (profileData.firstName !== undefined) updateData.firstName = profileData.firstName;
+    if (profileData.lastName !== undefined) updateData.lastName = profileData.lastName ?? ''; // Default to empty string if null/undefined
+    if (profileData.phoneNumber !== undefined) updateData.phoneNumber = profileData.phoneNumber ?? ''; // Default to empty string if null/undefined
+    if (profileData.email !== undefined) updateData.email = profileData.email;
+    if (profileData.bio !== undefined) updateData.bio = profileData.bio ?? null; // Use null if bio is undefined
+
+    const result = await this.db.update(schema.users)
+      .set(updateData) // Use the dynamically constructed object
+      .where(eq(schema.users.id, userId))
+      .returning();
+    
+    if (result.length === 0) {
+      return undefined; // User not found
+    }
+    return result[0];
+  }
+
+  async updateUserPassword(userId: number, newPasswordHash: string): Promise<void> {
+    const result = await this.db.update(schema.users)
+      .set({ password: newPasswordHash })
+      .where(eq(schema.users.id, userId))
+      .returning({ id: schema.users.id }); // Return something to check if update happened
+
+    if (result.length === 0) {
+      throw new Error(`User with ID ${userId} not found for password update.`);
+    }
+  }
+
+  async updateUserPassword(userId: number, newPasswordHash: string): Promise<void> {
+    const result = await this.db.update(schema.users)
+      .set({ password: newPasswordHash })
+      .where(eq(schema.users.id, userId))
+      .returning({ id: schema.users.id }); // Return something to check if update happened
+
+    if (result.length === 0) {
+      throw new Error(`User with ID ${userId} not found for password update.`);
+    }
   }
 
   // --- Trip methods ---

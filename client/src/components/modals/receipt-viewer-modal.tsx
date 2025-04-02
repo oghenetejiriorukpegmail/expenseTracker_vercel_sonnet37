@@ -71,21 +71,41 @@ export default function ReceiptViewerModal() {
                 <p>{error}</p>
               </div>
             ) : (
-              <div 
-                style={{ 
-                  transform: `scale(${zoomLevel})`, 
-                  transition: 'transform 0.2s ease' 
-                }}
-                className="transform-origin-center"
-              >
-                <img 
-                  src={currentReceiptUrl} 
-                  alt="Receipt" 
-                  onLoad={handleImageLoad}
-                  onError={handleImageError}
-                  className="max-h-full object-contain"
-                />
-              </div>
+              (() => {
+                const isPdf = currentReceiptUrl.toLowerCase().endsWith('.pdf');
+                if (isPdf) {
+                  // Render PDF using embed or iframe
+                  return (
+                    <iframe
+                      src={currentReceiptUrl}
+                      title="Receipt PDF"
+                      className="w-full h-full border-0"
+                      onLoad={() => { setIsImageLoaded(true); setError(null); }} // Treat PDF load as success
+                      onError={handleImageError} // Use same error handler
+                    />
+                    // Alternative: <embed src={currentReceiptUrl} type="application/pdf" className="w-full h-full" />
+                  );
+                } else {
+                  // Render Image
+                  return (
+                    <div
+                      style={{
+                        transform: `scale(${zoomLevel})`,
+                        transition: 'transform 0.2s ease'
+                      }}
+                      className="transform-origin-center"
+                    >
+                      <img
+                        src={currentReceiptUrl}
+                        alt="Receipt"
+                        onLoad={handleImageLoad}
+                        onError={handleImageError}
+                        className="max-h-full object-contain"
+                      />
+                    </div>
+                  );
+                }
+              })()
             )
           ) : (
             <div className="text-center text-gray-500 dark:text-gray-400">

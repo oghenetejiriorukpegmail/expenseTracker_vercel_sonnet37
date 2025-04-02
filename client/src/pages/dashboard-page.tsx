@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import Sidebar from "@/components/sidebar";
 import { useModalStore } from "@/lib/store";
 import { format } from "date-fns";
-import type { Trip, Expense } from "@shared/schema"; // Import types
+import type { Trip, Expense, User } from "@shared/schema"; // Import types including User
 import { Button } from "@/components/ui/button";
 import { PlusIcon } from "lucide-react";
 import SummaryCard from "@/components/cards/summary-card";
@@ -17,6 +17,12 @@ import AnimatedPage from "@/components/animated-page"; // Import the wrapper
 export default function DashboardPage() {
   const { toggleAddTrip } = useModalStore();
 
+  // Fetch profile data
+  const { data: profile, isLoading: profileLoading } = useQuery<User>({
+    queryKey: ["/api/profile"], // Use the same query key as profile page for caching
+    // queryFn is implicitly handled by the queryClient setup if using default fetcher
+  });
+
   // Fetch expenses and type the data
   const { data: expenses, isLoading: expensesLoading } = useQuery<Expense[]>({
     queryKey: ["/api/expenses"],
@@ -26,6 +32,13 @@ export default function DashboardPage() {
   const { data: trips, isLoading: tripsLoading } = useQuery<Trip[]>({
     queryKey: ["/api/trips"],
   });
+
+  // Update isLoading check
+  const isLoading = expensesLoading || tripsLoading || profileLoading;
+
+  // Construct welcome message
+  const welcomeMessage = `Welcome ${profile?.firstName || 'User'}`; // Removed exclamation mark
+
 
   // Calculate totals
   const totals = {
@@ -39,7 +52,7 @@ export default function DashboardPage() {
   // Get recent expenses and trips (ensure data exists before slicing)
   const recentExpenses = expenses ? expenses.slice(0, 4) : [];
   const recentTrips = trips ? trips.slice(0, 3) : [];
-  
+
   // Prepare data for charts
   const expensesByCategory = expenses
     ? expenses.reduce((acc: Record<string, number>, expense: Expense) => {
@@ -49,7 +62,7 @@ export default function DashboardPage() {
         return acc;
       }, {})
     : {};
-    
+
   // Generate trend data
   const trendDataMap = expenses
     ? expenses.reduce((acc: Record<string, number>, expense: Expense) => {
@@ -60,27 +73,30 @@ export default function DashboardPage() {
         return acc;
       }, {})
     : {};
-    
+
   const trendData = {
     labels: Object.keys(trendDataMap),
     data: Object.values(trendDataMap)
   };
 
-  const isLoading = expensesLoading || tripsLoading;
-
   return (
     <div className="flex flex-col md:flex-row h-screen">
       <Sidebar />
-      
+
       {/* Main Content */}
       {/* Wrap main content area with AnimatedPage */}
       <AnimatedPage className="flex-1 overflow-y-auto p-4 md:p-6">
-        {/* Removed the extra <main> tag, AnimatedPage acts as the main container now */}
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold mb-2 md:mb-0">Dashboard</h1>
+        {/* Removed Welcome Message from here */}
 
-          <div className="flex flex-wrap gap-2">
-            {/* Use primary button styling */}
+        {/* Dashboard Title and Buttons/Welcome Message */}
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold mb-2 md:mb-0">Dashboard Overview</h1>
+
+          {/* Container for Welcome Message and Button */}
+          <div className="flex items-center gap-4">
+             {/* Add Welcome Message here with matching style */}
+             <h1 className="text-2xl font-bold">{welcomeMessage}</h1>
+             {/* Add Trip Button */}
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={toggleAddTrip}>
               <PlusIcon className="h-4 w-4 mr-2" /> Add Trip
             </Button>
@@ -215,7 +231,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </AnimatedPage>
-      
+
       {/* Modals */}
       <AddExpenseModal />
       <AddTripModal />

@@ -4,20 +4,23 @@ import { createServer, type Server } from "http";
 // Remove direct storage import: import { storage } from "./storage";
 // Remove setupAuth import as it's handled in index.ts: import { setupAuth } from "./auth";
 import { z } from "zod";
-import { insertTripSchema, insertExpenseSchema, Expense } from "@shared/schema"; // Import Expense type
+import { insertTripSchema, insertExpenseSchema, Expense, InsertExpense } from "@shared/schema"; // Import Expense and InsertExpense types
 import { upload } from "./middleware/multer-config";
 import { processReceiptWithOCR, testOCR } from "./util/ocr";
 import { promises as fs } from "fs";
 import path from "path";
-import * as XLSX from "xlsx";
+// import * as XLSX from "xlsx"; // Removed xlsx
+import ExcelJS from 'exceljs'; // Added exceljs
 import { createWriteStream } from "fs";
 import multer from "multer";
 import type { IStorage } from "./storage"; // Import the storage interface type
 import { updateOcrApiKey, setDefaultOcrMethod, loadConfig, saveConfig } from "./config"; // Import config functions
+import { hashPassword, comparePasswords } from "./auth"; // Import password helpers
 
 // Define request type with file from multer
 interface MulterRequest extends Request {
-  file?: any; // Use any type to avoid TypeScript errors
+  file?: any;
+  files?: any[]; // Add files array for upload.array()
 }
 
 // Update function signature to accept storage instance
@@ -27,6 +30,106 @@ export async function registerRoutes(app: Express, storage: IStorage): Promise<S
 
   // Serve uploaded files
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
+  // --- Profile Routes ---
+
+  // GET current user's profile
+  app.get("/api/profile", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
+      // Fetch user data, excluding password
+      const userProfile = await storage.getUserById(req.user!.id);
+      if (!userProfile) {
+        return res.status(404).send("User not found");
+      }
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...profileData } = userProfile; // Omit password
+      res.json(profileData);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // PUT update user's profile
+  const profileUpdateSchema = z.object({
+    firstName: z.string().min(1, "First name cannot be empty").default(''),
+    lastName: z.string().optional().default(''), // Add optional lastName
+    phoneNumber: z.string().optional().default(''), // Add optional phoneNumber
+    email: z.string().email("Invalid email address"),
+    bio: z.string().optional(),
+  });
+
+  app.put("/api/profile", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
+      
+      const validatedData = profileUpdateSchema.parse(req.body);
+      
+      // Check if email is already taken by another user
+      const existingUserByEmail = await storage.getUserByEmail(validatedData.email);
+      if (existingUserByEmail && existingUserByEmail.id !== req.user!.id) {
+         return res.status(409).json({ message: "Email already in use by another account." });
+      }
+
+      const updatedUser = await storage.updateUserProfile(req.user!.id, validatedData);
+
+      if (!updatedUser) {
+        return res.status(404).send("User not found");
+      }
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...profileData } = updatedUser; // Omit password
+      res.json(profileData);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation failed", errors: error.errors });
+      }
+      // Handle potential unique constraint errors from the DB if email update conflicts
+      if (error instanceof Error && error.message.includes('UNIQUE constraint failed: users.email')) {
+         return res.status(409).json({ message: "Email already in use." });
+      }
+      next(error);
+    }
+  });
+
+  // POST change user's password
+  const passwordChangeSchema = z.object({
+    currentPassword: z.string().min(1, "Current password is required"),
+    newPassword: z.string().min(6, "New password must be at least 6 characters"),
+  });
+
+  app.post("/api/profile/change-password", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
+
+      const { currentPassword, newPassword } = passwordChangeSchema.parse(req.body);
+
+      // 1. Verify current password
+      const user = await storage.getUserById(req.user!.id);
+      if (!user) {
+        return res.status(404).send("User not found"); // Should not happen if authenticated
+      }
+      const isMatch = await comparePasswords(currentPassword, user.password);
+      if (!isMatch) {
+        return res.status(400).json({ message: "Incorrect current password." });
+      }
+
+      // 2. Hash new password
+      const newPasswordHash = await hashPassword(newPassword);
+
+      // 3. Update password in storage
+      await storage.updateUserPassword(req.user!.id, newPasswordHash);
+
+      res.status(200).json({ message: "Password updated successfully." });
+
+    } catch (error) {
+       if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation failed", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+
+  // --- End Profile Routes ---
 
   // Trips routes
   app.get("/api/trips", async (req, res, next) => {
@@ -103,6 +206,90 @@ export async function registerRoutes(app: Express, storage: IStorage): Promise<S
       await storage.deleteTrip(tripId);
       
       res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // POST Batch process receipts for a specific trip
+  app.post("/api/trips/:tripId/batch-process-receipts", (upload as any).array('receipts', 20), async (req: MulterRequest, res, next) => { // Cast upload to any
+    try {
+      if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
+
+      const tripId = parseInt(req.params.tripId);
+      if (isNaN(tripId)) {
+        return res.status(400).send("Invalid trip ID");
+      }
+
+      // Verify trip exists and belongs to user
+      const trip = await storage.getTrip(tripId);
+      if (!trip || trip.userId !== req.user!.id) {
+        return res.status(404).send("Trip not found or not authorized");
+      }
+
+      if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
+        return res.status(400).send("No receipt files uploaded");
+      }
+
+      const files = req.files;
+      const results = [];
+      const config = loadConfig(); // Load config for OCR settings
+
+      console.log(`Starting batch processing for trip ${tripId} (${trip.name}) with ${files.length} files.`);
+
+      for (const file of files) {
+        const filePath = path.join(process.cwd(), "uploads", file.filename);
+        let status = 'failed';
+        let errorMsg = 'Unknown processing error';
+        let createdExpense = null;
+
+        try {
+          console.log(`Processing file: ${file.originalname} (${file.filename})`);
+          const ocrResult = await processReceiptWithOCR(filePath, config.defaultOcrMethod || 'gemini', config.ocrTemplate || 'travel');
+
+          if (ocrResult.success && ocrResult.extractedData) {
+            const data = ocrResult.extractedData;
+            // Attempt to create expense - adapt data mapping as needed
+             const expenseData: InsertExpense = {
+                // Map extracted fields to InsertExpense schema
+                date: data.date || format(new Date(), 'yyyy-MM-dd'), // Use extracted or default
+                cost: typeof data.cost === 'number' ? data.cost : (parseFloat(data.cost) || 0), // Ensure number
+                type: data.type || 'Other', // Use extracted or default
+                vendor: data.vendor || 'Unknown Vendor', // Use extracted or default
+                location: data.location || 'Unknown Location', // Use extracted or default
+                comments: data.description || ocrResult.text?.substring(0, 200) || '', // Use description, fallback to raw text snippet
+                tripName: trip.name, // Link to the current trip
+             };
+             
+             // Validate required fields before creating
+             if (!expenseData.date || !expenseData.cost || !expenseData.type || !expenseData.vendor || !expenseData.location || !expenseData.tripName) {
+                 throw new Error(`Missing required fields extracted from ${file.originalname}`);
+             }
+
+             createdExpense = await storage.createExpense({
+                ...expenseData,
+                userId: req.user!.id,
+                receiptPath: file.filename, // Link the uploaded file
+             });
+             status = 'success';
+             errorMsg = '';
+             console.log(`Successfully created expense for ${file.originalname}`);
+          } else {
+            errorMsg = ocrResult.error || "OCR failed to extract data";
+            console.warn(`OCR failed for ${file.originalname}: ${errorMsg}`);
+          }
+        } catch (processingError) {
+          errorMsg = processingError instanceof Error ? processingError.message : String(processingError);
+          console.error(`Error processing file ${file.originalname}:`, processingError);
+          // Optionally delete the uploaded file if processing failed severely
+          // await fs.unlink(filePath).catch(e => console.error("Failed to delete file after error:", e));
+        }
+        results.push({ filename: file.originalname, status, error: errorMsg, expenseId: createdExpense?.id });
+      }
+
+      console.log(`Batch processing finished for trip ${tripId}.`);
+      res.status(200).json({ message: "Batch processing complete.", results });
+
     } catch (error) {
       next(error);
     }
@@ -656,62 +843,143 @@ function guessExpensePurpose(text: string): string {
         expenses = await storage.getExpensesByUserId(req.user!.id);
       }
       
-      // Create a new workbook
-      const workbook = XLSX.utils.book_new();
+      // --- Refactored using exceljs and template ---
+      const templatePath = path.join(process.cwd(), 'assets', 'Expense_Template.xlsx');
+      const workbook = new ExcelJS.Workbook();
       
-      // --- Prepare data for the new Excel format ---
-      
-      // 1. Employee and Application Date Info
-      const headerData = [
-        ["Employee Name", req.user!.username], // Use logged-in username
-        ["Application Date", format(new Date(), "MMMM do, yyyy")] // Current date
-      ];
-      
-      // 2. Expense Table Data
-      const expenseTableData = expenses.map((expense: Expense) => ({
-        Date: format(new Date(expense.date), "MM/dd/yyyy"), // Format date
-        Cost: typeof expense.cost === 'number' ? expense.cost : parseFloat(expense.cost), // Ensure cost is number
-        Currency: "CAD", // Hardcoded currency as per example
-        "Description of Travel Expenses": expense.comments || expense.description || expense.type || "", // Use comments, fallback to description/type
-      }));
+      try {
+        await workbook.xlsx.readFile(templatePath);
+        const worksheet = workbook.getWorksheet(1); // Assume data goes into the first sheet
 
-      // --- Create Worksheet ---
-      
-      // Create worksheet starting with Employee/Date info
-      const worksheet = XLSX.utils.aoa_to_sheet(headerData);
-      
-      // Define the starting row for the expense table (leaving space below header)
-      // headerData has 2 rows, add title row, add empty row = start at row 5 (index 4)
-      // Let's simplify and start right after headerData for now. Adjust row index if needed.
-      const expenseTableStartRow = headerData.length + 2; // Add space for title and headers
+        if (!worksheet) {
+          throw new Error("Worksheet not found in the template.");
+        }
 
-      // Add the main expense table headers and data below the header info
-      XLSX.utils.sheet_add_json(worksheet, expenseTableData, {
-        origin: `A${expenseTableStartRow}`, // Start table data below header + space
-        skipHeader: false // Include headers from expenseTableData keys
-      });
+        // --- Fetch user profile to get first name ---
+        const userProfile = await storage.getUserById(req.user!.id);
+        const employeeName = userProfile?.firstName || req.user!.username; // Use firstName or fallback to username
+        const applicationDate = new Date(); // Use Date object
 
-      // Optional: Add main title (Requires more complex cell manipulation)
-      // Example: worksheet['C3'] = { v: "EXPENSES & TRAVEL REIMBURSEMENT FORM", t: 's', s: { font: { bold: true }, alignment: { horizontal: 'center'} } };
-      // Example: worksheet['!merges'] = [{ s: { r: 2, c: 2 }, e: { r: 2, c: 4 } }]; // Merge C3:E3
+        // --- Search for and replace placeholders in all cells ---
+        console.log("Searching for placeholders in the template...");
+        worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+          row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+            if (cell.value && typeof cell.value === 'string') {
+              let cellValue = cell.value as string;
+              
+              // Replace {{full name}} with employee name
+              if (cellValue.includes('{{full name}}')) {
+                console.log(`Found {{full name}} placeholder in cell ${worksheet.getCell(rowNumber, colNumber).address}`);
+                cell.value = cellValue.replace(/{{full name}}/g, employeeName);
+              }
+              
+              // Handle special case for "Date:___________{{Today's Date}}__________"
+              if (cellValue.includes("Date:") && cellValue.includes("{{Today's Date}}")) {
+                console.log(`Found Date:___{{Today's Date}} pattern in cell ${worksheet.getCell(rowNumber, colNumber).address}`);
+                // Format the date as a string in MM/DD/YYYY format
+                const formattedDate = format(applicationDate, 'M/d/yyyy');
+                // Replace only the placeholder part while keeping the "Date:" prefix
+                cell.value = cellValue.replace(/{{Today's Date}}/g, formattedDate);
+              }
+              // Handle regular {{Today's Date}} placeholder (not part of the Date: pattern)
+              else if (cellValue.includes("{{Today's Date}}")) {
+                console.log(`Found {{Today's Date}} placeholder in cell ${worksheet.getCell(rowNumber, colNumber).address}`);
+                // For standalone date placeholders, replace with a date object
+                if (cellValue === "{{Today's Date}}") {
+                  cell.value = applicationDate;
+                  // Apply date format if not already set
+                  if (!cell.numFmt) {
+                    cell.numFmt = 'mm/dd/yyyy';
+                  }
+                } else {
+                  // For mixed content, replace with formatted string
+                  const formattedDate = format(applicationDate, 'M/d/yyyy');
+                  cell.value = cellValue.replace(/{{Today's Date}}/g, formattedDate);
+                }
+              }
+            }
+          });
+        });
 
-      // Add worksheet to workbook
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Expenses");
-      
-      // Optional: Set column widths (Requires direct worksheet manipulation)
-      // Example: worksheet['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 50 }]; // A, B, C, D widths
-      
-      // Write to buffer
-      const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
-      
-      // Set response headers
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename=expenses-${new Date().toISOString().split("T")[0]}.xlsx`);
-      
-      // Send the file
-      res.send(buffer);
+        // --- Also populate specific cells as before (for backward compatibility) ---
+        // Populate Header Info (Assuming cells B9 and B10 from template image)
+        console.log(`Populating B9 with Employee Name: ${employeeName}`);
+        worksheet.getCell('B9').value = employeeName;
+        
+        console.log(`Populating B10 with Application Date: ${applicationDate}`);
+        worksheet.getCell('B10').value = applicationDate;
+        // Apply MM/DD/YYYY format if not set by template
+        if (!worksheet.getCell('B10').numFmt) {
+           console.log("Applying date format 'mm/dd/yyyy' to B10");
+           worksheet.getCell('B10').numFmt = 'mm/dd/yyyy';
+        }
+
+        // Populate Signature Fields (Assuming B57 and E58)
+        console.log(`Populating B57 (Applicant Signature) with: ${employeeName}`);
+        worksheet.getCell('B57').value = employeeName; // Applicant Signature
+        
+        console.log(`Populating E58 (Date) with: ${applicationDate}`);
+        worksheet.getCell('E58').value = applicationDate; // Date next to Manager Signature
+        // Apply MM/DD/YYYY format if not set by template
+        if (!worksheet.getCell('E58').numFmt) {
+           console.log("Applying date format 'mm/dd/yyyy' to E58");
+           worksheet.getCell('E58').numFmt = 'mm/dd/yyyy';
+        }
+
+        // --- Populate Expense Data (Assuming starting row 13, columns A, B, C, D) ---
+        const expenseTableStartRow = 13; 
+        expenses.forEach((expense: Expense, index: number) => {
+          const currentRowNumber = expenseTableStartRow + index;
+          const currentRow = worksheet.getRow(currentRowNumber); // Get the row object
+
+          // Populate cells - use cell objects for better control
+          const dateCell = currentRow.getCell('A'); // Column A for Date
+          dateCell.value = new Date(expense.date);
+          // Apply format if not already set by template
+          if (!dateCell.numFmt) dateCell.numFmt = 'mm/dd/yyyy'; 
+
+          const costCell = currentRow.getCell('B'); // Column B for Cost
+          costCell.value = typeof expense.cost === 'number' ? expense.cost : parseFloat(expense.cost);
+          // Apply format if not already set by template
+          if (!costCell.numFmt) costCell.numFmt = '$#,##0.00'; 
+
+          const currencyCell = currentRow.getCell('C'); // Column C for Currency
+          currencyCell.value = "CAD"; // Hardcoded currency
+          // Apply alignment if not already set by template
+          if (!currencyCell.alignment) currencyCell.alignment = { horizontal: 'center' }; 
+
+          const descriptionCell = currentRow.getCell('D'); // Column D for Description
+          descriptionCell.value = expense.comments || expense.type || ""; // Use comments, fallback to type
+          
+          // Optional: Ensure row height is sufficient if template doesn't define it
+          // currentRow.height = 15; // Example height
+        });
+        
+        // If there are more rows in the template than needed, clear them (optional)
+        // const lastDataRow = expenseTableStartRow + expenses.length - 1;
+        // // Example: Clear rows from lastDataRow + 1 down to row 50 if template has extra rows
+        // for (let r = lastDataRow + 1; r <= 50; r++) { 
+        //    const row = worksheet.getRow(r);
+        //    if (!row.hasValues) break; // Stop if we hit empty rows
+        //    row.values = []; // Clear values
+        // }
+
+
+        // --- Write to Buffer ---
+        const buffer = await workbook.xlsx.writeBuffer();
+
+        // --- Send Response ---
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.setHeader("Content-Disposition", `attachment; filename=expenses-export-${format(new Date(), "yyyy-MM-dd")}.xlsx`); // Changed filename slightly
+        res.send(buffer);
+
+      } catch (templateError) {
+         console.error("Error processing Excel template:", templateError);
+         // Fallback or error response if template loading/processing fails
+         res.status(500).json({ message: "Failed to generate report from template.", error: templateError instanceof Error ? templateError.message : String(templateError) });
+      }
     } catch (error) {
-      next(error);
+      next(error); // Catch errors from fetching expenses or authentication
     }
   });
 
