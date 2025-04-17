@@ -2,7 +2,7 @@ import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useSettingsStore, useSidebarStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
-import { UserIcon, LogOut, Moon, Sun } from "lucide-react";
+import { UserIcon, LogOut, Moon, Sun, Car } from "lucide-react"; // Import Car icon
 
 export default function Sidebar() {
   const [location] = useLocation();
@@ -120,7 +120,23 @@ export default function Sidebar() {
             </svg>
             <span>Expenses</span>
           </div>
-          
+
+          {/* Mileage Logs Link */}
+          <div
+            className={`flex items-center p-3 rounded-lg cursor-pointer ${
+              isActiveRoute("/mileage-logs")
+                ? "text-primary bg-blue-50 dark:bg-blue-900/20"
+                : "hover:bg-gray-100 dark:hover:bg-gray-700"
+            }`}
+            onClick={() => {
+              window.location.href = "/mileage-logs";
+              close();
+            }}
+          >
+            <Car className="h-5 w-5 mr-3" /> {/* Use Car icon */}
+            <span>Mileage Logs</span>
+          </div>
+
           {/* Profile Link */}
           <div
             className={`flex items-center p-3 rounded-lg cursor-pointer ${

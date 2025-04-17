@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Trip, Expense } from "@shared/schema"; // Import Trip and Expense types
+import type { Trip, Expense, MileageLog } from "@shared/schema"; // Import MileageLog type
 
 type ThemeMode = 'light' | 'dark';
 
@@ -91,6 +91,9 @@ interface ModalState {
   receiptViewerOpen: boolean;
   currentReceiptUrl: string | null;
   defaultTripName: string | null;
+  addEditMileageLogOpen: boolean; // State for mileage modal
+  editingMileageLog: MileageLog | null; // Data for editing mileage log
+  mileageLogTripId: number | null; // Trip ID when adding mileage log from trip card
   toggleAddExpense: (defaultTrip?: string) => void;
   toggleAddTrip: () => void;
   toggleEditTrip: (trip?: Trip | null) => void;
@@ -99,6 +102,7 @@ interface ModalState {
   // Duplicate toggleBatchUpload removed
   openReceiptViewer: (url: string) => void;
   closeReceiptViewer: () => void;
+  toggleAddEditMileageLog: (options?: { log?: MileageLog | null, tripId?: number | null }) => void; // Toggle function for mileage modal
   closeAll: () => void;
 }
 
@@ -115,7 +119,10 @@ export const useModalStore = create<ModalState>((set) => ({
   receiptViewerOpen: false,
   currentReceiptUrl: null,
   defaultTripName: null,
-  
+  addEditMileageLogOpen: false, // Initial state for mileage modal
+  editingMileageLog: null,
+  mileageLogTripId: null,
+
   toggleAddExpense: (defaultTrip?: string) => set((state) => ({
     addExpenseOpen: !state.addExpenseOpen,
     defaultTripName: !state.addExpenseOpen ? (defaultTrip || null) : null, // Set default trip only when opening
@@ -178,6 +185,22 @@ export const useModalStore = create<ModalState>((set) => ({
     currentReceiptUrl: null
   }),
   
+  toggleAddEditMileageLog: (options?: { log?: MileageLog | null, tripId?: number | null }) => set((state) => {
+    const isOpen = !state.addEditMileageLogOpen;
+    return {
+      addEditMileageLogOpen: isOpen,
+      editingMileageLog: isOpen ? options?.log ?? null : null,
+      mileageLogTripId: isOpen ? options?.tripId ?? null : null,
+      // Close other modals when opening this one
+      addExpenseOpen: false,
+      addTripOpen: false,
+      editTripOpen: false,
+      editExpenseOpen: false,
+      batchUploadOpen: false,
+      receiptViewerOpen: false,
+    };
+  }),
+
   closeAll: () => set({
     addExpenseOpen: false,
     addTripOpen: false,
@@ -190,6 +213,9 @@ export const useModalStore = create<ModalState>((set) => ({
     batchUploadTripName: null, // Reset batch upload trip name on closeAll
     receiptViewerOpen: false,
     currentReceiptUrl: null,
-    defaultTripName: null
+    defaultTripName: null,
+    addEditMileageLogOpen: false, // Ensure mileage modal is closed too
+    editingMileageLog: null,
+    mileageLogTripId: null,
   }),
 }));

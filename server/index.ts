@@ -1,3 +1,4 @@
+import 'dotenv/config'; // Load environment variables FIRST
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet"; // Import helmet
 import { registerRoutes } from "./routes";

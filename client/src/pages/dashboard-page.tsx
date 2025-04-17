@@ -188,7 +188,7 @@ export default function DashboardPage() {
                           </span>
                         </td>
                         <td className="py-3 px-2 whitespace-nowrap text-right font-medium">
-                          ${expense.cost.toFixed(2)}
+                          ${(parseFloat(expense.cost) || 0).toFixed(2)}
                         </td>
                       </tr>
                     ))

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useModalStore } from "@/lib/store";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { UploadCloud } from "lucide-react"; // Import UploadCloud icon
+import { UploadCloud, Car } from "lucide-react"; // Import UploadCloud and Car icons
 
 import type { Trip } from "@shared/schema"; // Import the full Trip type
 
@@ -16,7 +16,8 @@ interface TripCardProps {
 }
 
 export default function TripCard({ trip }: TripCardProps) {
-  const { toggleAddExpense, toggleEditTrip, toggleBatchUpload } = useModalStore(); // Add toggleBatchUpload
+  // Add toggleAddEditMileageLog to the destructured store functions
+  const { toggleAddExpense, toggleEditTrip, toggleBatchUpload, toggleAddEditMileageLog } = useModalStore();
   const { toast } = useToast();
   // const [isExporting, setIsExporting] = useState(false); // Remove isExporting state
   const [isDeleting, setIsDeleting] = useState(false);
@@ -40,7 +41,7 @@ export default function TripCard({ trip }: TripCardProps) {
   
   const expenseCount = tripExpenses?.length || 0;
   const totalSpent = tripExpenses
-    ? tripExpenses.reduce((sum: number, expense: any) => sum + expense.cost, 0).toFixed(2)
+    ? tripExpenses.reduce((sum: number, expense: any) => sum + parseFloat(expense.cost || '0'), 0).toFixed(2)
     : "0.00";
   
   // Remove the handleExportTrip function entirely
@@ -170,7 +171,17 @@ export default function TripCard({ trip }: TripCardProps) {
             </svg>
             Add Expense
           </Button>
-          
+          {/* Add Mileage Button */}
+          <Button
+            size="sm"
+            className="px-2.5 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+            // Call the store function to open the modal, passing the tripId
+            onClick={() => toggleAddEditMileageLog({ tripId: trip.id })}
+          >
+            <Car className="h-3.5 w-3.5 mr-1" />
+            + Mileage
+          </Button>
+
           {/* Change Button to an <a> tag styled as a button */}
           <Button
             size="sm"

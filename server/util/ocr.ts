@@ -113,6 +113,9 @@ export async function processReceiptWithOCR(filePath: string, method: string = "
     }
 
     // --- Post-processing (common for both PDF and Image results) ---
+    if (!result) {
+        throw new Error("OCR processing failed to produce a result.");
+    }
     console.log(`OCR result (first 100 chars): ${result.substring(0, 100)}...`);
 
     try {
@@ -138,6 +141,90 @@ export async function processReceiptWithOCR(filePath: string, method: string = "
   } catch (error) {
     console.error("OCR processing error:", error);
     return { success: false, error: error instanceof Error ? error.message : "Unknown error occurred" };
+  }
+}
+
+// Function specifically for processing odometer images with an AI Vision API
+export async function processOdometerImageWithAI(filePath: string, method: string): Promise<{ success: boolean, reading?: number, error?: string }> {
+  if (!fs.existsSync(filePath)) {
+    return { success: false, error: "Odometer image file not found" };
+  }
+
+  console.log(`Processing odometer image with AI method: ${method}, File: ${filePath}`);
+
+  try {
+    let rawResultText: string | undefined;
+
+    // Choose the appropriate AI processing function based on the method
+    // We pass a specific "odometer" template/prompt
+    switch (method) {
+      case "gemini":
+        rawResultText = await processGemini(filePath, "odometer");
+        break;
+      case "openai":
+        rawResultText = await processOpenAI(filePath, "odometer");
+        break;
+      case "claude":
+        rawResultText = await processClaude(filePath, "odometer");
+        break;
+      case "openrouter":
+        rawResultText = await processOpenRouter(filePath, "odometer");
+        break;
+      default:
+        throw new Error(`Unsupported AI OCR method for odometer: ${method}`);
+    }
+
+    if (!rawResultText) {
+      throw new Error("AI OCR processing returned no result.");
+    }
+
+    console.log(`AI raw output for odometer: ${rawResultText}`);
+
+    // Attempt to parse potential JSON first (in case the AI returns structured data)
+    let extractedReadingStr: string | undefined;
+    try {
+        // Attempt to find JSON within the response, potentially wrapped in markdown
+        const jsonMatch = rawResultText.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || rawResultText.match(/(\{[\s\S]*?\})/);
+        let jsonStrToParse = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : rawResultText;
+
+        const jsonData = JSON.parse(jsonStrToParse.trim());
+        // Look for common keys where the reading might be stored
+        extractedReadingStr = jsonData.reading || jsonData.odometer || jsonData.value || jsonData.number || jsonData.text;
+        if (typeof extractedReadingStr !== 'string' && extractedReadingStr !== undefined) { // Corrected &amp;&amp; to &&
+            extractedReadingStr = String(extractedReadingStr); // Convert potential number to string
+        }
+        console.log("Extracted reading from JSON:", extractedReadingStr);
+    } catch (e) {
+        // If JSON parsing fails or no relevant key found, assume the raw text is the reading
+        if (!extractedReadingStr) {
+            extractedReadingStr = rawResultText;
+            console.log("No JSON or relevant key found, using raw text:", extractedReadingStr);
+        }
+    }
+
+
+    // Clean up the extracted text: keep only digits and potentially a single decimal point
+    const cleanedText = extractedReadingStr?.replace(/[^0-9.]/g, '') || '';
+    // Ensure only one decimal point exists if multiple were kept
+    const parts = cleanedText.split('.');
+    const finalCleanedText = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('')}` : parts[0];
+
+    console.log(`Cleaned AI output: ${finalCleanedText}`);
+
+    // Attempt to parse the cleaned text as a number
+    const reading = parseFloat(finalCleanedText);
+
+    if (isNaN(reading)) {
+      console.warn("Could not parse a valid number from AI OCR text.");
+      return { success: false, error: "Could not extract a valid odometer reading from the image using AI." };
+    }
+
+    console.log(`Extracted odometer reading via AI: ${reading}`);
+    return { success: true, reading };
+
+  } catch (error) {
+    console.error(`AI OCR processing error (${method}):`, error);
+    return { success: false, error: error instanceof Error ? error.message : `AI OCR (${method}) failed` };
   }
 }
 
@@ -285,7 +372,9 @@ async function processOpenAI(filePath: string, template: string = "general") {
     body: JSON.stringify({
       model: "gpt-4-vision-preview", // Or gpt-4o if preferred
       messages: [{ role: "user", content: [
-          { type: "text", text: template === 'travel'
+          { type: "text", text: template === 'odometer'
+              ? "This is an image of a car's odometer. Extract ONLY the numerical reading displayed. Ignore any other text or symbols (like 'km', 'miles', 'trip'). Return ONLY the number as plain text, e.g., '123456.7'. If you can return JSON, use the format {\"reading\": \"123456.7\"}."
+              : template === 'travel'
               ? "This is a travel expense receipt (image or PDF). Prioritize extracting: Transaction Date (date), Cost/Amount (cost), Currency Code (currency, e.g., USD, EUR, CAD), and a concise Description/Purpose (description). Return ONLY a structured JSON object with these fields: date, cost, currency, description."
               : "This is a general receipt (image or PDF). Extract all visible text. Then analyze for: date, vendor/business name (vendor), location, items purchased with prices (items array), total amount (total), and payment method (paymentMethod). Return ONLY a structured JSON object."
           },
@@ -335,7 +424,9 @@ async function processGemini(filePath: string, template: string = "general") {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [
-          { text: template === 'travel'
+          { text: template === 'odometer'
+              ? "This is an image of a car's odometer. Extract ONLY the numerical reading displayed. Ignore any other text or symbols (like 'km', 'miles', 'trip'). Return ONLY the number as plain text, e.g., '123456.7'. If you can return JSON, use the format {\"reading\": \"123456.7\"}."
+              : template === 'travel'
               ? "You are an AI specialized in extracting data from travel expense receipts (image or PDF). Extract the following REQUIRED fields: Transaction Date (date as string 'YYYY-MM-DD' if possible, otherwise original format), Cost/Amount (cost as a number), Currency Code (currency as a 3-letter string like 'USD', 'EUR', 'CAD'), a concise Description/Purpose (description as string), Expense Type (type as string, e.g., Food, Transportation), Vendor Name (vendor as string), and Location (location as string). Return ONLY a valid JSON object containing ALL these fields: date, cost, currency, description, type, vendor, location. Example: {\"date\": \"2024-03-15\", \"cost\": 45.50, \"currency\": \"USD\", \"description\": \"Taxi fare\", \"type\": \"Transportation\", \"vendor\": \"City Cabs\", \"location\": \"New York, NY\"}"
               : "You are an AI specialized in reading and extracting data from general receipts (image or PDF). Extract all visible text. Then, analyze to identify: date, vendor/business name (vendor), location, individual items purchased with prices (items array with name and price), subtotal, tax, total amount (total), and payment method (paymentMethod). Return ONLY a structured JSON object with these fields."
           },
@@ -379,7 +470,9 @@ async function processClaude(filePath: string, template: string = "general") {
       max_tokens: 2000,
       system: "You are an AI assistant specialized in extracting and structuring data from receipts. Return ONLY a valid JSON object.",
       messages: [{ role: "user", content: [
-          { type: "text", text: template === 'travel'
+          { type: "text", text: template === 'odometer'
+              ? "This is an image of a car's odometer. Extract ONLY the numerical reading displayed. Ignore any other text or symbols (like 'km', 'miles', 'trip'). Return ONLY the number as plain text, e.g., '123456.7'. If you can return JSON, use the format {\"reading\": \"123456.7\"}."
+              : template === 'travel'
               ? "This is a travel expense receipt (image or PDF). Prioritize extracting: Transaction Date (date), Cost/Amount (cost), Currency Code (currency, e.g., USD, EUR, CAD), and a concise Description/Purpose (description). Return ONLY a structured JSON object with these fields: date, cost, currency, description."
               : "This is a general receipt (image or PDF). First, extract all visible text. Second, analyze to identify: date, vendor/business name (vendor), location, items purchased with prices (items array), total amount (total), and payment method (paymentMethod). Format this data in a structured JSON object at the end."
           },
@@ -412,7 +505,9 @@ async function processOpenRouter(filePath: string, template: string = "general")
     body: JSON.stringify({
       model: "anthropic/claude-3-haiku", // Use a model known for vision, like Claude Haiku via OpenRouter
       messages: [{ role: "user", content: [
-          { type: "text", text: template === 'travel'
+          { type: "text", text: template === 'odometer'
+              ? "This is an image of a car's odometer. Extract ONLY the numerical reading displayed. Ignore any other text or symbols (like 'km', 'miles', 'trip'). Return ONLY the number as plain text, e.g., '123456.7'. If you can return JSON, use the format {\"reading\": \"123456.7\"}."
+              : template === 'travel'
               ? "This is a travel expense receipt (image or PDF). Prioritize extracting: Transaction Date (date), Cost/Amount (cost), Currency Code (currency, e.g., USD, EUR, CAD), and a concise Description/Purpose (description). Return ONLY a structured JSON object with these fields: date, cost, currency, description."
               : "This is a general receipt (image or PDF). Extract all visible text. Then analyze for: date, vendor/business name (vendor), location, items purchased with prices (items array), total amount (total), and payment method (paymentMethod). Return ONLY a structured JSON object."
           },
@@ -441,29 +536,34 @@ function extractDataFromText(text: string) {
   try {
     // First try to extract JSON from markdown code blocks
     let jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    
+    let jsonContent: string | null = null;
+
     // If found in markdown, clean it up
-    if (jsonMatch && jsonMatch.length > 1) {
+    if (jsonMatch && jsonMatch.length > 1) { // Corrected &amp;&amp; to &&, added null check
       console.log("Found JSON in markdown code block, extracting content");
       // Extract the content between the markdown delimiters
-      const jsonContent = jsonMatch[1].trim();
-      jsonMatch = [jsonMatch[0], jsonContent];
+      jsonContent = jsonMatch[1].trim();
+      // jsonMatch = [jsonMatch[0], jsonContent]; // Keep original match for parsing below
     }
     // If not found in markdown, try to find JSON objects directly
     else {
       jsonMatch = text.match(/(\{[\s\S]*?\})/g);
-      if (jsonMatch && jsonMatch.length > 1) {
+      if (jsonMatch && jsonMatch.length > 0) { // Corrected &amp;&amp; to &&, added null check, check length > 0
         let largestMatch = '';
-        for (const match of jsonMatch) if (match.length > largestMatch.length) largestMatch = match;
-        jsonMatch = [largestMatch, largestMatch];
+        // Find the largest JSON-like string if multiple are found
+        for (const match of jsonMatch) {
+            if (match.length > largestMatch.length) {
+                largestMatch = match;
+            }
+        }
+        jsonContent = largestMatch; // Use the largest match as potential JSON content
       }
     }
 
-    if (jsonMatch) {
-      const jsonStr = jsonMatch[1] || jsonMatch[0];
-      console.log("Found JSON structure:", jsonStr.substring(0, 100) + (jsonStr.length > 100 ? "..." : ""));
+    if (jsonContent) { // Check if we found potential JSON content
+      console.log("Found potential JSON structure:", jsonContent.substring(0, 100) + (jsonContent.length > 100 ? "..." : ""));
       try {
-        const parsedData = JSON.parse(jsonStr.trim());
+        const parsedData = JSON.parse(jsonContent.trim());
         console.log("Successfully parsed JSON data");
 
         // --- Map fields based on common names ---
@@ -489,7 +589,7 @@ function extractDataFromText(text: string) {
         // Items
         const itemsKeys = ['items', 'Items', 'products', 'Products', 'lineItems', 'LineItems'];
         for (const key of itemsKeys) {
-            if (parsedData[key] && Array.isArray(parsedData[key])) {
+            if (parsedData[key] && Array.isArray(parsedData[key])) { // Corrected &amp;&amp; to &&
                 data.items = parsedData[key];
                 break;
             }

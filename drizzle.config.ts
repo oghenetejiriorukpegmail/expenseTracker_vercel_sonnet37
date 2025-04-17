@@ -1,14 +1,18 @@
+import 'dotenv/config'; // Load environment variables
 import { defineConfig } from "drizzle-kit";
 
-// No need to check for DATABASE_URL for local SQLite
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL environment variable is not set");
+}
 
+// Configure Drizzle Kit for Supabase PostgreSQL
 export default defineConfig({
   out: "./migrations",
   schema: "./shared/schema.ts",
-  dialect: "sqlite", // Change dialect to sqlite
-  // driver property removed, let drizzle-kit infer or use default
+  dialect: "postgresql", // Change dialect to postgresql
   dbCredentials: {
-    url: "sqlite.db", // Point to a local file
+    // Use the Supabase connection string
+    url: process.env.DATABASE_URL,
   },
   verbose: true, // Optional: for more detailed output during migrations
   strict: true, // Optional: for stricter schema checks

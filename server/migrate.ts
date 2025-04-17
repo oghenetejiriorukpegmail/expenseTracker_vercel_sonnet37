@@ -1,35 +1,17 @@
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import Database from 'better-sqlite3';
-import path from 'path';
-import { fileURLToPath } from 'url'; // Import url module
+import 'dotenv/config'; // Load environment variables first!
+// Import the Supabase storage initializer which handles migrations
+import { SupabaseStorage } from './supabase-storage';
 
-console.log("Running database migrations...");
+console.log("Running database migrations via SupabaseStorage initializer...");
 
-// ESM equivalent for __dirname
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-try {
-  // Construct the path to the database file relative to the script location
-  // Assuming migrate.ts is in server/ and sqlite.db is in the root
-  const dbPath = path.join(__dirname, '..', 'sqlite.db'); // This should now work
-  console.log(`Database path: ${dbPath}`);
-
-  const sqlite = new Database(dbPath);
-  const db = drizzle(sqlite);
-
-  // Construct the path to the migrations folder relative to the script location
-  const migrationsFolder = path.join(__dirname, '..', 'migrations'); // This should now work
-  console.log(`Migrations folder: ${migrationsFolder}`);
-
-  // This will automatically search for SQL files in the migrations folder and apply the ones not applied yet.
-  migrate(db, { migrationsFolder: migrationsFolder });
-
-  console.log("Migrations applied successfully!");
-  sqlite.close(); // Close the database connection
-  process.exit(0); // Exit successfully
-} catch (error) {
-  console.error("Error running migrations:", error);
-  process.exit(1); // Exit with error
-}
+(async () => {
+  try {
+    // Initialize storage - this will connect and run migrations
+    await SupabaseStorage.initialize();
+    console.log("Migrations applied successfully via initializer!");
+    process.exit(0); // Exit successfully
+  } catch (error) {
+    console.error("Error running migrations via initializer:", error);
+    process.exit(1); // Exit with error
+  }
+})();

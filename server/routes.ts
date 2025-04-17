@@ -2,12 +2,14 @@ import express, { type Express, Request } from "express";
 import { format } from "date-fns"; // Import format function
 import { createServer, type Server } from "http";
 import { z } from "zod";
-import { insertTripSchema, insertExpenseSchema, Expense, InsertExpense } from "@shared/schema"; // Import Expense and InsertExpense types
+import { insertTripSchema, insertExpenseSchema, Expense, InsertExpense, insertMileageLogSchema, rawInsertMileageLogSchema } from "@shared/schema"; // Import raw schema for partial update
+// Removed duplicate Buffer import
 import { upload } from "./middleware/multer-config";
-import { processReceiptWithOCR, testOCR } from "./util/ocr";
+import { processReceiptWithOCR, processOdometerImageWithAI, testOCR } from "./util/ocr"; // Added processOdometerImageWithAI
 import { promises as fsPromises, createReadStream, existsSync } from "fs"; // Import fs promises and createReadStream, existsSync
 import path from "path";
 import ExcelJS from 'exceljs'; // Added exceljs
+import { Buffer } from 'buffer'; // Import Buffer for explicit typing
 import archiver from 'archiver'; // Import archiver
 import multer from "multer";
 import type { IStorage } from "./storage"; // Import the storage interface type
@@ -250,7 +252,8 @@ export async function registerRoutes(app: Express, storage: IStorage): Promise<S
              const expenseData: InsertExpense = {
                 // Map extracted fields to InsertExpense schema
                 date: data.date || format(new Date(), 'yyyy-MM-dd'), // Use extracted or default
-                cost: typeof data.cost === 'number' ? data.cost : (parseFloat(data.cost) || 0), // Ensure number
+                // Convert cost to string for numeric schema type
+                cost: String(typeof data.cost === 'number' ? data.cost : (parseFloat(String(data.cost)) || 0)), // Ensure data.cost is string before parseFloat
                 type: data.type || 'Other', // Use extracted or default
                 vendor: data.vendor || 'Unknown Vendor', // Use extracted or default
                 location: data.location || 'Unknown Location', // Use extracted or default
@@ -503,6 +506,269 @@ export async function registerRoutes(app: Express, storage: IStorage): Promise<S
       next(error);
     }
   });
+
+  // --- Mileage Log Routes ---
+
+  // GET /api/mileage-logs - Retrieve mileage logs for the user
+  app.get("/api/mileage-logs", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
+
+      // Basic validation for query params (can be expanded)
+      const querySchema = z.object({
+        tripId: z.coerce.number().int().positive().optional(),
+        startDate: z.string().optional(), // Add date validation if needed
+        endDate: z.string().optional(),
+        limit: z.coerce.number().int().positive().optional(),
+        offset: z.coerce.number().int().min(0).optional(),
+        sortBy: z.string().optional(),
+        sortOrder: z.enum(['asc', 'desc']).optional(),
+      });
+
+      const validatedQuery = querySchema.parse(req.query);
+
+      const logs = await storage.getMileageLogsByUserId(req.user!.id, validatedQuery);
+      res.json(logs);
+    } catch (error) {
+       if (error instanceof z.ZodError) {
+         return res.status(400).json({ message: "Invalid query parameters", errors: error.errors });
+       }
+      next(error);
+    }
+  });
+
+  // POST /api/mileage-logs - Create a new mileage log
+  // Updated to handle optional image URLs and entry method
+  app.post("/api/mileage-logs", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
+
+      // Validate against the full schema, including optional image URLs
+      const validatedData = insertMileageLogSchema.parse(req.body);
+
+      // Calculate distance
+      const calculatedDistance = validatedData.endOdometer - validatedData.startOdometer;
+      if (calculatedDistance <= 0) {
+          return res.status(400).json({ message: "Calculated distance must be positive." });
+      }
+
+      const newLog = await storage.createMileageLog({
+        ...validatedData, // Includes startImageUrl, endImageUrl, entryMethod if provided
+        userId: req.user!.id,
+        calculatedDistance: calculatedDistance,
+      });
+
+      res.status(201).json(newLog);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation failed", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+
+  // PUT /api/mileage-logs/:id - Update an existing mileage log
+  // Updated to handle optional image URLs and entry method
+  app.put("/api/mileage-logs/:id", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
+
+      const logId = parseInt(req.params.id);
+      if (isNaN(logId)) {
+        return res.status(400).send("Invalid mileage log ID");
+      }
+
+      // Fetch existing log to verify ownership
+      const existingLog = await storage.getMileageLogById(logId);
+      if (!existingLog) {
+        return res.status(404).send("Mileage log not found");
+      }
+      if (existingLog.userId !== req.user!.id) {
+        return res.status(403).send("Forbidden");
+      }
+
+      // Use the raw schema (before extend/refine) and make it partial for updates
+      const updateSchema = rawInsertMileageLogSchema.partial().extend({
+          // Re-add number validation for partial updates if needed
+          startOdometer: z.number().positive('Start odometer must be positive').optional(),
+          endOdometer: z.number().positive('End odometer must be positive').optional(),
+          tripId: z.number().int().positive().optional(),
+          // Allow optional image URLs and entry method in updates
+          startImageUrl: z.string().url().optional().nullable(), // Allow null to clear image
+          endImageUrl: z.string().url().optional().nullable(),   // Allow null to clear image
+          entryMethod: z.enum(['manual', 'ocr']).optional(),
+      }).refine((data: any) => { // Add refinement logic here
+          // If both odometer readings are present, ensure end > start
+          if (data.startOdometer !== undefined && data.endOdometer !== undefined) {
+              return data.endOdometer > data.startOdometer;
+          }
+          // If only one is present, compare with existing value
+          if (data.startOdometer !== undefined && existingLog.endOdometer !== null) {
+              return parseFloat(existingLog.endOdometer) > data.startOdometer;
+          }
+          if (data.endOdometer !== undefined && existingLog.startOdometer !== null) {
+              return data.endOdometer > parseFloat(existingLog.startOdometer);
+          }
+          return true; // Allow update if only one or neither odometer is changing
+      }, {
+          message: "End odometer reading must be greater than start odometer reading",
+          path: ["endOdometer"],
+      });
+
+
+      const validatedData = updateSchema.parse(req.body);
+
+      // Recalculate distance if odometer readings changed
+      let calculatedDistance: number | undefined = undefined;
+      const startOdo = validatedData.startOdometer ?? parseFloat(existingLog.startOdometer);
+      const endOdo = validatedData.endOdometer ?? parseFloat(existingLog.endOdometer);
+
+      if (validatedData.startOdometer !== undefined || validatedData.endOdometer !== undefined) {
+          calculatedDistance = endOdo - startOdo;
+          if (calculatedDistance <= 0) {
+             return res.status(400).json({ message: "Calculated distance must be positive." });
+          }
+      }
+
+
+      // Phase 2: Handle image URL updates
+      // Note: Deleting old images if URLs are changed/removed might be needed depending on storage strategy
+      // If startImageUrl is explicitly set to null in the request, delete the old image
+      if (validatedData.startImageUrl === null && existingLog.startImageUrl) {
+          const filename = path.basename(existingLog.startImageUrl);
+          const filePath = path.join(process.cwd(), "uploads", filename);
+          await fsPromises.unlink(filePath).catch(e => console.error(`Failed to delete old start image ${filePath}:`, e));
+      }
+      // If endImageUrl is explicitly set to null in the request, delete the old image
+      if (validatedData.endImageUrl === null && existingLog.endImageUrl) {
+          const filename = path.basename(existingLog.endImageUrl);
+          const filePath = path.join(process.cwd(), "uploads", filename);
+          await fsPromises.unlink(filePath).catch(e => console.error(`Failed to delete old end image ${filePath}:`, e));
+      }
+
+      const updatedLog = await storage.updateMileageLog(logId, {
+        ...validatedData,
+        calculatedDistance: calculatedDistance, // Pass calculated distance if changed
+      });
+
+      res.json(updatedLog);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation failed", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+
+  // DELETE /api/mileage-logs/:id - Delete a mileage log
+  app.delete("/api/mileage-logs/:id", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
+
+      const logId = parseInt(req.params.id);
+      if (isNaN(logId)) {
+        return res.status(400).send("Invalid mileage log ID");
+      }
+
+      // Fetch existing log to verify ownership AND get image URLs before deleting DB record
+      const log = await storage.getMileageLogById(logId);
+      if (!log) {
+        // Already gone, consider success or 404
+        return res.status(404).send("Mileage log not found");
+      }
+      if (log.userId !== req.user!.id) {
+        return res.status(403).send("Forbidden");
+      }
+
+      // Phase 2: Delete associated images from storage bucket ('uploads' folder)
+      if (log.startImageUrl) {
+          try {
+              const filename = path.basename(new URL(log.startImageUrl, `http://localhost`).pathname); // Handle potential full URLs
+              const filePath = path.join(process.cwd(), "uploads", filename);
+              if (existsSync(filePath)) {
+                  await fsPromises.unlink(filePath);
+                  console.log(`Deleted start image: ${filePath}`);
+              } else {
+                  console.warn(`Start image file not found, skipping delete: ${filePath}`);
+              }
+          } catch (e) {
+              console.error(`Error processing/deleting start image ${log.startImageUrl}:`, e);
+          }
+      }
+      if (log.endImageUrl) {
+           try {
+              const filename = path.basename(new URL(log.endImageUrl, `http://localhost`).pathname); // Handle potential full URLs
+              const filePath = path.join(process.cwd(), "uploads", filename);
+               if (existsSync(filePath)) {
+                  await fsPromises.unlink(filePath);
+                  console.log(`Deleted end image: ${filePath}`);
+              } else {
+                  console.warn(`End image file not found, skipping delete: ${filePath}`);
+              }
+          } catch (e) {
+              console.error(`Error processing/deleting end image ${log.endImageUrl}:`, e);
+          }
+      }
+
+      // Now delete the database record
+      await storage.deleteMileageLog(logId);
+
+      res.status(204).send(); // No content on successful deletion
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // POST /api/mileage-logs/upload-odometer-image - Upload and process odometer image
+  app.post("/api/mileage-logs/upload-odometer-image", (upload as any).single("odometerImage"), async (req: MulterRequest, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
+
+      if (!req.file) {
+        return res.status(400).send("No odometer image file uploaded");
+      }
+
+      const filePath = path.join(process.cwd(), "uploads", req.file.filename);
+      const imageUrl = `/uploads/${req.file.filename}`; // Relative URL for client access
+
+      // Load config to get the default OCR method
+      const config = loadConfig();
+      const method = config.defaultOcrMethod || "gemini"; // Use configured default or fallback to gemini
+
+      console.log(`Processing odometer image ${req.file.filename} using method: ${method}`);
+      const ocrResult = await processOdometerImageWithAI(filePath, method);
+
+      if (ocrResult.success) {
+        res.json({
+          success: true,
+          imageUrl: imageUrl,
+          reading: ocrResult.reading,
+        });
+      } else {
+        // Even if OCR fails, return the image URL but include the error
+        console.warn(`Odometer OCR failed for ${req.file.filename}: ${ocrResult.error}`);
+        res.status(400).json({ // Use 400 or maybe 200 with an error flag? 400 seems appropriate for failed processing
+          success: false,
+          imageUrl: imageUrl, // Still return URL so user knows upload worked
+          error: ocrResult.error || "Failed to extract odometer reading.",
+        });
+        // Optionally delete the file if OCR fails completely? For now, keep it.
+        // await fsPromises.unlink(filePath).catch(e => console.error("Failed to delete file after OCR error:", e));
+      }
+
+    } catch (error) {
+      console.error("Odometer image upload/OCR error:", error);
+      // Clean up uploaded file if an unexpected error occurs during processing
+      if (req.file) {
+          const filePath = path.join(process.cwd(), "uploads", req.file.filename);
+          await fsPromises.unlink(filePath).catch(e => console.error("Failed to delete file after unexpected error:", e));
+      }
+      next(error);
+    }
+  });
+
+  // --- End Mileage Log Routes ---
+
 
   // OCR processing routes
   app.post("/api/ocr/process", (upload as any).single("receipt"), async (req: MulterRequest, res, next) => {
@@ -878,7 +1144,7 @@ function guessExpensePurpose(text: string): string {
       // --- Generate Excel ---
       const templatePath = path.join(process.cwd(), 'assets', 'Expense_Template.xlsx');
       const workbook = new ExcelJS.Workbook();
-      let excelBuffer: Buffer | undefined;
+      let excelBuffer: Buffer | undefined; // Explicitly type with Node.js Buffer
 
       try {
         await workbook.xlsx.readFile(templatePath);
@@ -935,8 +1201,9 @@ function guessExpensePurpose(text: string): string {
           currentRow.getCell('D').value = expense.comments || expense.type || "";
         });
 
-        // Write Excel to buffer
-        excelBuffer = await workbook.xlsx.writeBuffer(); // Removed 'as Buffer' cast
+        // Write Excel to buffer and ensure it's a standard Node.js Buffer
+        const excelData = await workbook.xlsx.writeBuffer();
+        excelBuffer = Buffer.from(excelData); // Convert to Node.js Buffer
 
       } catch (templateError) {
          console.error("Error processing Excel template:", templateError);

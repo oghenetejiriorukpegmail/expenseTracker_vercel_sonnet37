@@ -1,5 +1,5 @@
 import { users, trips, expenses } from "@shared/schema";
-import type { User, InsertUser, Trip, InsertTrip, Expense, InsertExpense } from "@shared/schema";
+import type { User, InsertUser, Trip, InsertTrip, Expense, InsertExpense, MileageLog, InsertMileageLog } from "@shared/schema"; // Added MileageLog types
 import session from "express-session";
 import createMemoryStore from "memorystore";
 
@@ -29,18 +29,25 @@ export interface IStorage {
   createExpense(expense: InsertExpense & { userId: number, receiptPath?: string | null }): Promise<Expense>;
   updateExpense(id: number, expense: Partial<InsertExpense & { receiptPath?: string | null }>): Promise<Expense>;
   deleteExpense(id: number): Promise<void>;
-  
+
+  // Mileage Log methods
+  getMileageLogById(id: number): Promise<MileageLog | undefined>;
+  getMileageLogsByUserId(userId: number, options?: { tripId?: number; startDate?: string; endDate?: string; limit?: number; offset?: number; sortBy?: string; sortOrder?: 'asc' | 'desc' }): Promise<MileageLog[]>;
+  createMileageLog(log: InsertMileageLog & { userId: number; calculatedDistance: number; startImageUrl?: string | null; endImageUrl?: string | null }): Promise<MileageLog>;
+  updateMileageLog(id: number, log: Partial<InsertMileageLog & { calculatedDistance?: number; startImageUrl?: string | null; endImageUrl?: string | null }>): Promise<MileageLog>;
+  deleteMileageLog(id: number): Promise<void>;
+
   // Session store
   sessionStore: session.Store; // Use session.Store type
 }
 
 // MemStorage class removed as it's no longer used.
 
-// Import the new SQLite storage implementation
-import { SqliteStorage } from './sqlite-storage';
+// Import the new Supabase storage implementation
+import { SupabaseStorage } from './supabase-storage';
 
 // Initialize and export the storage instance (as a promise)
-const storagePromise = SqliteStorage.initialize(); // Call the async initializer
+const storagePromise = SupabaseStorage.initialize(); // Call the async initializer
 
 // Export the promise. Modules importing this will need to await it.
 export const storage = storagePromise;
