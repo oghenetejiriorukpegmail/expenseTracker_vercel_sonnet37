@@ -14,13 +14,29 @@ export async function apiRequest(
 ): Promise<Response> {
   // Check if data is FormData
   const isFormData = data instanceof FormData;
+  
+  // Get token from localStorage
+  const token = localStorage.getItem('auth_token');
+  
+  // Prepare headers
+  const headers: Record<string, string> = {};
+  
+  // Add Authorization header if token exists
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  // Add Content-Type for JSON requests
+  if (!isFormData && data) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   const res = await fetch(url, {
     method,
-    // Do NOT set Content-Type header for FormData; browser sets it with boundary
-    headers: !isFormData && data ? { "Content-Type": "application/json" } : {},
+    headers,
     // Send FormData directly, otherwise stringify JSON
     body: isFormData ? data : (data ? JSON.stringify(data) : undefined),
+    // No longer need credentials: "include" with JWT, but keep for backward compatibility
     credentials: "include",
   });
 
@@ -34,7 +50,20 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    // Get token from localStorage
+    const token = localStorage.getItem('auth_token');
+    
+    // Prepare headers
+    const headers: Record<string, string> = {};
+    
+    // Add Authorization header if token exists
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
     const res = await fetch(queryKey[0] as string, {
+      headers,
+      // Keep credentials for backward compatibility
       credentials: "include",
     });
 
