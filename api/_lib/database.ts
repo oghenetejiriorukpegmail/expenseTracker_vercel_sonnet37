@@ -14,23 +14,55 @@ declare global {
 
 let conn: postgres.Sql;
 
-if (process.env.NODE_ENV === 'production') {
-  // In production, we'll create a new connection for each request
-  // Use a smaller connection pool size for Vercel's serverless environment
-  conn = postgres(process.env.DATABASE_URL!, {
-    max: 1, // Single connection for serverless functions
-    idle_timeout: 20, // Close idle connections after 20 seconds
-    connect_timeout: 10 // Connection timeout after 10 seconds
-  });
-} else {
-  // In development, we'll reuse the connection
-  if (!global.cachedConnection) {
-    global.cachedConnection = postgres(process.env.DATABASE_URL!, {
-      max: 5, // More connections for development
-      idle_timeout: 30
-    });
+// Check if DATABASE_URL is defined
+if (!process.env.DATABASE_URL) {
+  console.error('FATAL ERROR: DATABASE_URL environment variable is not set');
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1); // Exit in production if DATABASE_URL is missing
   }
-  conn = global.cachedConnection;
+}
+
+try {
+  if (process.env.NODE_ENV === 'production') {
+    // In production, we'll create a new connection for each request
+    // Use a smaller connection pool size for Vercel's serverless environment
+    console.log('Initializing production database connection');
+    conn = postgres(process.env.DATABASE_URL!, {
+      max: 1, // Single connection for serverless functions
+      idle_timeout: 20, // Close idle connections after 20 seconds
+      connect_timeout: 10, // Connection timeout after 10 seconds
+      debug: false // Disable debug logging in production
+    });
+  } else {
+    // In development, we'll reuse the connection
+    console.log('Initializing development database connection');
+    if (!global.cachedConnection) {
+      global.cachedConnection = postgres(process.env.DATABASE_URL!, {
+        max: 5, // More connections for development
+        idle_timeout: 30,
+        debug: true // Enable debug logging in development
+      });
+    }
+    conn = global.cachedConnection;
+  }
+
+  // Test the connection
+  console.log('Testing database connection...');
+  conn`SELECT 1`.then(() => {
+    console.log('Database connection successful');
+  }).catch(err => {
+    console.error('Database connection test failed:', err);
+    if (process.env.NODE_ENV === 'production') {
+      process.exit(1); // Exit in production if connection test fails
+    }
+  });
+} catch (error) {
+  console.error('Error initializing database connection:', error);
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1); // Exit in production if connection initialization fails
+  }
+  // In development, create a dummy connection that will throw errors when used
+  conn = postgres('postgres://invalid:invalid@localhost:5432/invalid');
 }
 
 // Initialize Drizzle with the postgres client
@@ -42,6 +74,11 @@ export const sql = conn;
 // Helper function to close the connection (useful for serverless functions)
 export const closeConnection = async () => {
   if (process.env.NODE_ENV === 'production') {
-    await conn.end();
+    try {
+      await conn.end();
+      console.log('Database connection closed');
+    } catch (error) {
+      console.error('Error closing database connection:', error);
+    }
   }
 };

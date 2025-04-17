@@ -6,13 +6,17 @@ import { Loader2, Upload, Trash2, Image as ImageIcon, FileText } from "lucide-re
 interface ReceiptUploadProps {
   onFileSelect: (file: File | null) => void;
   selectedFile: File | null;
+  currentReceiptUrl?: string | null;
 }
 
-export default function ReceiptUpload({ onFileSelect, selectedFile }: ReceiptUploadProps) {
+export default function ReceiptUpload({ onFileSelect, selectedFile, currentReceiptUrl }: ReceiptUploadProps) {
   const { toast } = useToast();
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  
+  // If there's a current receipt URL but no selected file, show the existing receipt
+  const showExistingReceipt = !selectedFile && currentReceiptUrl;
   
   const validateFile = (file: File): boolean => {
     // Check file type
@@ -98,18 +102,29 @@ export default function ReceiptUpload({ onFileSelect, selectedFile }: ReceiptUpl
   
   return (
     <div className="mt-1">
-      {selectedFile ? (
+      {selectedFile || showExistingReceipt ? (
         <div className="border-2 border-gray-300 dark:border-gray-600 rounded-md p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center">
-              {selectedFile.type.startsWith('image/') ? (
-                <ImageIcon className="h-5 w-5 text-gray-500 dark:text-gray-400 mr-2" />
+              {selectedFile ? (
+                <>
+                  {selectedFile.type.startsWith('image/') ? (
+                    <ImageIcon className="h-5 w-5 text-gray-500 dark:text-gray-400 mr-2" />
+                  ) : (
+                    <FileText className="h-5 w-5 text-gray-500 dark:text-gray-400 mr-2" />
+                  )}
+                  <div className="text-sm text-gray-700 dark:text-gray-300 truncate">
+                    {selectedFile.name}
+                  </div>
+                </>
               ) : (
-                <FileText className="h-5 w-5 text-gray-500 dark:text-gray-400 mr-2" />
+                <>
+                  <ImageIcon className="h-5 w-5 text-gray-500 dark:text-gray-400 mr-2" />
+                  <div className="text-sm text-gray-700 dark:text-gray-300 truncate">
+                    Existing Receipt
+                  </div>
+                </>
               )}
-              <div className="text-sm text-gray-700 dark:text-gray-300 truncate">
-                {selectedFile.name}
-              </div>
             </div>
             <Button variant="ghost" size="sm" onClick={handleRemoveFile}>
               <Trash2 className="h-4 w-4 text-red-500" />
@@ -122,10 +137,18 @@ export default function ReceiptUpload({ onFileSelect, selectedFile }: ReceiptUpl
             </div>
           ) : previewUrl ? (
             <div className="h-40 flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded overflow-hidden">
-              <img 
-                src={previewUrl} 
-                alt="Receipt preview" 
-                className="max-h-full max-w-full object-contain" 
+              <img
+                src={previewUrl}
+                alt="Receipt preview"
+                className="max-h-full max-w-full object-contain"
+              />
+            </div>
+          ) : showExistingReceipt ? (
+            <div className="h-40 flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded overflow-hidden">
+              <img
+                src={currentReceiptUrl!}
+                alt="Existing receipt"
+                className="max-h-full max-w-full object-contain"
               />
             </div>
           ) : (

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        h2 {
+            margin-top: 0;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Expense Tracker API Test</h1>
+    
+    <div class="section">
+        <h2>Authentication</h2>
+        <div>
+            <label for="username">Username:</label>
+            <input type="text" id="username" value="testuser">
+            
+            <label for="password">Password:</label>
+            <input type="password" id="password" value="testpassword">
+            
+            <button onclick="register()">Register</button>
+            <button onclick="login()">Login</button>
+            <button onclick="logout()">Logout</button>
+        </div>
+        <pre id="auth-result">Results will appear here...</pre>
+    </div>
+    
+    <div class="section">
+        <h2>Trip Management</h2>
+        <div>
+            <label for="trip-name">Trip Name:</label>
+            <input type="text" id="trip-name" value="Business Trip to New York">
+            
+            <label for="trip-description">Trip Description:</label>
+            <textarea id="trip-description">Annual conference attendance</textarea>
+            
+            <button onclick="createTrip()">Create Trip</button>
+            <button onclick="getTrips()">Get All Trips</button>
+            <button onclick="getTripById()">Get Trip by ID</button>
+        </div>
+        <pre id="trip-result">Results will appear here...</pre>
+    </div>
+
+    <script>
+        let token = '';
+        let currentTripId = null;
+
+        // Authentication functions
+        async function register() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                document.getElementById('auth-result').textContent = JSON.stringify(data, null, 2);
+                
+                if (response.ok && data.token) {
+                    token = data.token;
+                    console.log('Token saved:', token);
+                }
+            } catch (error) {
+                document.getElementById('auth-result').textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                document.getElementById('auth-result').textContent = JSON.stringify(data, null, 2);
+                
+                if (response.ok && data.token) {
+                    token = data.token;
+                    console.log('Token saved:', token);
+                }
+            } catch (error) {
+                document.getElementById('auth-result').textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        async function logout() {
+            try {
+                const response = await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.text();
+                document.getElementById('auth-result').textContent = data || 'Logged out successfully';
+                token = '';
+            } catch (error) {
+                document.getElementById('auth-result').textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        // Trip management functions
+        async function createTrip() {
+            const name = document.getElementById('trip-name').value;
+            const description = document.getElementById('trip-description').value;
+            
+            try {
+                const response = await fetch('/api/trips', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ name, description })
+                });
+                
+                const data = await response.json();
+                document.getElementById('trip-result').textContent = 
+                    `Status: ${response.status}\n\n${JSON.stringify(data, null, 2)}`;
+                
+                if (response.ok && data.id) {
+                    currentTripId = data.id;
+                    console.log('Trip created with ID:', currentTripId);
+                }
+            } catch (error) {
+                document.getElementById('trip-result').textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        async function getTrips() {
+            try {
+                const response = await fetch('/api/trips', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                document.getElementById('trip-result').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('trip-result').textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        async function getTripById() {
+            if (!currentTripId) {
+                document.getElementById('trip-result').textContent = 'No trip ID available. Create a trip first.';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/trips/${currentTripId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                document.getElementById('trip-result').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('trip-result').textContent = 'Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>

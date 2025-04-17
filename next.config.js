@@ -1,24 +1,36 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
-  // Configure redirects to maintain compatibility with old routes
-  async redirects() {
+  // API routes configuration
+  async rewrites() {
     return [
       {
-        source: '/api/auth/login',
-        destination: '/api/auth/login',
-        permanent: true,
+        source: '/api/auth/:path*',
+        destination: 'http://localhost:5000/api/auth/:path*', // Forward auth requests to Express server
       },
       {
-        source: '/api/auth/register',
-        destination: '/api/auth/register',
-        permanent: true,
+        source: '/api/trips/:path*',
+        destination: 'http://localhost:5000/api/trips/:path*', // Forward trips requests to Express server
       },
       {
-        source: '/api/auth/logout',
-        destination: '/api/auth/logout',
-        permanent: true,
+        source: '/api/expenses/:path*',
+        destination: 'http://localhost:5000/api/expenses/:path*', // Forward expenses requests to Express server
+      },
+      {
+        source: '/api/profile/:path*',
+        destination: 'http://localhost:5000/api/profile/:path*', // Forward profile requests to Express server
+      },
+      // Keep Next.js API routes working for other paths
+      {
+        source: '/api/:path*',
+        destination: '/api/:path*',
+        has: [
+          {
+            type: 'header',
+            key: 'x-use-nextjs',
+            value: '1',
+          },
+        ],
       },
     ];
   },
@@ -59,4 +71,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+export default nextConfig;

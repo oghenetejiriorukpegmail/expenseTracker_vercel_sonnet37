@@ -63,13 +63,14 @@ export default function EditExpenseModal() {
     resolver: zodResolver(expenseSchema),
     defaultValues: { // Set defaults matching the schema structure
       type: "",
-      date: "", 
+      date: "",
       vendor: "",
       location: "",
       cost: "",
       tripName: "",
       comments: "",
-      // description removed
+      // Only add description for travel template
+      ...(ocrTemplate === 'travel' ? { description: "" } : {})
     },
   });
 
@@ -87,9 +88,8 @@ export default function EditExpenseModal() {
         cost: String(editingExpense.cost) || "", // Convert cost to string
         tripName: editingExpense.tripName || "",
         comments: editingExpense.comments || "",
-        // Description might be in comments for travel, handle appropriately if needed
-        // For simplicity, we might just edit comments directly
-        // description removed from reset
+        // Only add description for travel template
+        ...(ocrTemplate === 'travel' ? { description: editingExpense.comments || "" } : {})
       });
       // Set the current receipt URL for display/keeping track
       setCurrentReceiptUrl(editingExpense.receiptPath ? `/uploads/${editingExpense.receiptPath}` : null);
@@ -186,7 +186,7 @@ export default function EditExpenseModal() {
                   {ocrTemplate === 'travel' && (
                     <FormField
                       control={form.control}
-                      name="description"
+                      name="comments"
                       render={({ field }) => (
                         <FormItem className="col-span-2">
                           <FormLabel>Description/Purpose <span className="text-red-500">*</span></FormLabel>

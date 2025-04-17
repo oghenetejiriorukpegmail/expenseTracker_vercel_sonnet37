@@ -6,12 +6,53 @@ import { setupVite, serveStatic, log } from "./vite";
 import { storage as storagePromise } from "./storage"; // Import the promise
 import { setupAuth } from "./auth"; // Import setupAuth
 import { initializeEnvFromConfig } from "./config"; // Import config initialization
+import path from "path";
+import fs from "fs";
 
+// Check for required environment variables
+const requiredEnvVars = [
+  'DATABASE_URL',
+  'SUPABASE_URL',
+  'SUPABASE_SERVICE_KEY',
+  'JWT_SECRET'
+];
+
+const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+if (missingEnvVars.length > 0) {
+  console.error(`FATAL ERROR: Missing required environment variables: ${missingEnvVars.join(', ')}`);
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1); // Exit in production if required env vars are missing
+  }
+}
+
+// Check if at least one OCR API key is available
+const ocrApiKeys = ['GEMINI_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENROUTER_API_KEY'];
+const hasOcrApiKey = ocrApiKeys.some(key => !!process.env[key]);
+if (!hasOcrApiKey) {
+  console.warn('WARNING: No OCR API keys found. OCR functionality will be limited.');
+  if (process.env.NODE_ENV === 'production') {
+    console.error('FATAL ERROR: At least one OCR API key is required in production.');
+    process.exit(1);
+  }
+}
+
+// Initialize Express app
 const app = express();
 
 // Add helmet middleware for security headers
-// Loosen CSP in development to allow Vite HMR and React Refresh
-if (process.env.NODE_ENV !== 'production') {
+if (process.env.NODE_ENV === 'production') {
+  console.log('Applying production security settings');
+  app.use(helmet()); // Use default helmet settings in production
+  
+  // Additional security headers for production
+  app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('X-Frame-Options', 'DENY');
+    next();
+  });
+} else {
+  console.log('Applying development security settings');
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
@@ -21,13 +62,13 @@ if (process.env.NODE_ENV !== 'production') {
       },
     }
   }));
-} else {
-  app.use(helmet()); // Use default helmet settings in production
 }
 
+// Body parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Request logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -44,7 +85,9 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        // Limit the response size in logs
+        const responseStr = JSON.stringify(capturedJsonResponse);
+        logLine += ` :: ${responseStr.length > 100 ? responseStr.substring(0, 100) + '...' : responseStr}`;
       }
 
       if (logLine.length > 80) {
@@ -59,46 +102,94 @@ app.use((req, res, next) => {
 });
 
 // Initialize environment variables from config file
+console.log('Initializing environment variables from config file');
 initializeEnvFromConfig();
 
+// Main application initialization
 (async () => {
-  // Await the storage initialization
-  const storage = await storagePromise;
-  console.log("Storage initialized successfully.");
+  try {
+    console.log('Starting server initialization...');
+    
+    // Await the storage initialization
+    console.log('Initializing storage...');
+    const storage = await storagePromise;
+    console.log("Storage initialized successfully.");
 
-  // Setup auth with the initialized storage and session store
-  // Ensure setupAuth is called BEFORE registerRoutes if routes depend on auth/session
-  setupAuth(app, storage.sessionStore, storage); // Pass storage instance
-  console.log("Auth setup complete.");
+    // Setup auth with the initialized storage and session store
+    console.log('Setting up authentication...');
+    setupAuth(app, storage.sessionStore, storage); // Pass storage instance
+    console.log("Auth setup complete.");
 
-  // Register routes, passing the initialized storage
-  const server = await registerRoutes(app, storage); // Pass storage instance
-  console.log("Routes registered.");
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    // Register routes, passing the initialized storage
+    console.log('Registering routes...');
+    const server = await registerRoutes(app, storage); // Pass storage instance
+    console.log("Routes registered.");
+    
+    // Global error handler
+    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    console.error("Server error:", err);
-  });
+      // Don't expose stack traces in production
+      const errorResponse = process.env.NODE_ENV === 'production'
+        ? { message }
+        : { message, stack: err.stack };
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
+      res.status(status).json(errorResponse);
+      console.error("Server error:", err);
+    });
+
+    // Setup static file serving or development server
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Setting up development server with Vite...');
+      await setupVite(app, server);
+    } else {
+      console.log('Setting up static file serving for production...');
+      serveStatic(app);
+    }
+
+    // Catch-all route for SPA
+    app.get('*', (req, res) => {
+      // Exclude API routes from catch-all
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ message: 'API endpoint not found' });
+      }
+      
+      // Serve the index.html for client-side routing
+      const indexPath = path.join(process.cwd(), 'client', 'dist', 'index.html');
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(404).send('Application not found');
+      }
+    });
+
+    // Start the server
+    const port = process.env.PORT || 5000;
+    server.listen({
+      port,
+      host: "127.0.0.1",
+    }, () => {
+      console.log(`Server started successfully`);
+      log(`Expense Tracker API serving on http://127.0.0.1:${port}`);
+    });
+  } catch (error) {
+    console.error('FATAL ERROR during server initialization:', error);
+    process.exit(1);
   }
-
-  // ALWAYS serve the app on port 5000
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = 5000;
-  server.listen({
-    port,
-    host: "127.0.0.1",
-  }, () => {
-    log(`serving on port ${port}`);
-  });
 })();
+
+// Handle uncaught exceptions and unhandled rejections
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  }
+});

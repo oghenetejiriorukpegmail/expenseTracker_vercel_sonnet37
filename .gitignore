@@ -27,3 +27,13 @@ sqlite.db-shm # SQLite shared memory file
 
 # Configuration files (should use environment variables or examples)
 app-config.json
+
+# Build directories
+.next/
+out/
+build/
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

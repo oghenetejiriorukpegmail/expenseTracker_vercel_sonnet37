@@ -383,7 +383,9 @@ export default function AddEditMileageLogModal({ isOpen, onClose, mileageLog, tr
                       control={form.control}
                       name="startImageUrl"
                       render={({ field }) => (
-                          field.value ? <p className="text-xs text-muted-foreground mt-1">URL: {field.value.substring(0, 30)}...</p> : null
+                          <div>
+                            {field.value ? <p className="text-xs text-muted-foreground mt-1">URL: {field.value.substring(0, 30)}...</p> : null}
+                          </div>
                       )}
                     />
                 </FormItem>
@@ -439,7 +441,9 @@ export default function AddEditMileageLogModal({ isOpen, onClose, mileageLog, tr
                       control={form.control}
                       name="endImageUrl"
                       render={({ field }) => (
-                          field.value ? <p className="text-xs text-muted-foreground mt-1">URL: {field.value.substring(0, 30)}...</p> : null
+                          <div>
+                            {field.value ? <p className="text-xs text-muted-foreground mt-1">URL: {field.value.substring(0, 30)}...</p> : null}
+                          </div>
                       )}
                     />
                 </FormItem>

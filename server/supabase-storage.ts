@@ -44,22 +44,16 @@ export class SupabaseStorage implements IStorage {
     } catch (error) {
       console.error("FATAL ERROR: Failed to connect to Supabase database during startup.");
       console.error("Error details:", error);
-      process.exit(1); // Exit the process on connection failure
+      
+      // In development mode, create a mock storage instance instead of exiting
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn("Running in development mode with mock storage. Database features will be limited.");
+        return createMockStorage();
+      }
+      
+      process.exit(1); // Exit the process on connection failure in production
     }
     // --- END CONNECTIVITY TEST ---
-
-    // // Run migrations using the Drizzle instance
-    // console.log("Running database migrations against Supabase...");
-    // try {
-    //     // Use the migrate function from drizzle-orm/postgres-js/migrator
-    //     await migrate(instance.db, { migrationsFolder: './migrations' });
-    //     console.log("Supabase migrations complete.");
-    // } catch (error) {
-    //     console.error("Error running Supabase migrations:", error);
-    //     // Decide if you want to throw or handle this error
-    //     // For initial setup, throwing might be appropriate if migrations fail
-    //     throw error;
-    // }
 
     // Initialize PostgreSQL session store
     const PgStore = connectPgSimple(session);
@@ -275,6 +269,7 @@ export class SupabaseStorage implements IStorage {
         // Decide if this should throw an error or just warn
      }
   }
+
   // --- Mileage Log methods ---
   async getMileageLogById(id: number): Promise<MileageLog | undefined> {
     const result = await this.db.select().from(schema.mileageLogs).where(eq(schema.mileageLogs.id, id)).limit(1);
@@ -282,42 +277,65 @@ export class SupabaseStorage implements IStorage {
   }
 
   async getMileageLogsByUserId(userId: number, options?: { tripId?: number; startDate?: string; endDate?: string; limit?: number; offset?: number; sortBy?: string; sortOrder?: 'asc' | 'desc' }): Promise<MileageLog[]> {
-    const conditions = [eq(schema.mileageLogs.userId, userId)];
-
-    if (options?.tripId) {
-      conditions.push(eq(schema.mileageLogs.tripId, options.tripId));
+    try {
+      // Create a simple query to get all mileage logs for the user
+      const result = await this.db
+        .select()
+        .from(schema.mileageLogs)
+        .where(eq(schema.mileageLogs.userId, userId));
+      
+      // Filter the results in memory
+      let filteredResults = [...result];
+      
+      // Apply filters
+      if (options?.tripId !== undefined) {
+        filteredResults = filteredResults.filter(log => log.tripId === options.tripId);
+      }
+      
+      if (options?.startDate) {
+        const startDate = new Date(options.startDate);
+        filteredResults = filteredResults.filter(log => new Date(log.tripDate) >= startDate);
+      }
+      
+      if (options?.endDate) {
+        const endDate = new Date(options.endDate);
+        filteredResults = filteredResults.filter(log => new Date(log.tripDate) <= endDate);
+      }
+      
+      // Sort the results
+      const sortBy = options?.sortBy || 'tripDate';
+      const sortDirection = options?.sortOrder || 'desc';
+      
+      filteredResults.sort((a, b) => {
+        let comparison = 0;
+        
+        if (sortBy === 'tripDate') {
+          comparison = new Date(a.tripDate).getTime() - new Date(b.tripDate).getTime();
+        } else if (sortBy === 'startOdometer') {
+          comparison = parseFloat(a.startOdometer) - parseFloat(b.startOdometer);
+        } else if (sortBy === 'endOdometer') {
+          comparison = parseFloat(a.endOdometer) - parseFloat(b.endOdometer);
+        } else if (sortBy === 'calculatedDistance') {
+          comparison = parseFloat(a.calculatedDistance) - parseFloat(b.calculatedDistance);
+        } else if (sortBy === 'createdAt' && a.createdAt && b.createdAt) {
+          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        }
+        
+        return sortDirection === 'asc' ? comparison : -comparison;
+      });
+      
+      // Apply pagination
+      if (options?.limit !== undefined || options?.offset !== undefined) {
+        const offset = options?.offset || 0;
+        const limit = options?.limit || filteredResults.length;
+        filteredResults = filteredResults.slice(offset, offset + limit);
+      }
+      
+      return filteredResults;
+    } catch (error) {
+      console.error('Error in getMileageLogsByUserId:', error);
+      return []; // Return empty array on error
     }
-    if (options?.startDate) {
-      // Assuming startDate is 'YYYY-MM-DD', adjust if needed
-      conditions.push(gte(schema.mileageLogs.tripDate, new Date(options.startDate)));
-    }
-    if (options?.endDate) {
-      // Assuming endDate is 'YYYY-MM-DD', adjust if needed
-      conditions.push(lte(schema.mileageLogs.tripDate, new Date(options.endDate)));
-    }
-
-    let query = this.db.select().from(schema.mileageLogs).where(and(...conditions));
-
-    // Sorting
-    const sortBy = options?.sortBy || 'tripDate'; // Default sort by date
-    const sortOrder = options?.sortOrder === 'asc' ? asc : desc; // Default desc
-    // Ensure the column exists in the schema before trying to sort by it
-    const sortColumn = Object.prototype.hasOwnProperty.call(schema.mileageLogs, sortBy)
-        ? schema.mileageLogs[sortBy as keyof typeof schema.mileageLogs.$inferSelect]
-        : schema.mileageLogs.tripDate; // Fallback sort column
-
-    query = query.orderBy(sortOrder(sortColumn));
-
-
-    // Pagination
-    if (options?.limit) {
-      query = query.limit(options.limit);
-    }
-    if (options?.offset) {
-      query = query.offset(options.offset);
-    }
-
-    return query;
   }
 
   async createMileageLog(logData: InsertMileageLog & { userId: number; calculatedDistance: number; startImageUrl?: string | null; endImageUrl?: string | null }): Promise<MileageLog> {
@@ -379,4 +397,301 @@ export class SupabaseStorage implements IStorage {
       console.warn(`Attempted to delete non-existent mileage log with ID ${id}`);
     }
   }
+}
+
+// Create a mock storage instance for development when database is not available
+function createMockStorage(): IStorage {
+  // Create a mock session store
+  const mockSessionStore = new (connectPgSimple(session))({
+    conString: 'postgres://mock:mock@localhost:5432/mock',
+    createTableIfMissing: false,
+  });
+  
+  // Create a mock storage object
+  const mockStorage: IStorage = {
+    // Session store
+    sessionStore: mockSessionStore,
+    
+    // User methods
+    getUserById: async () => {
+      console.log("Using mock getUserById");
+      return {
+        id: 1,
+        username: 'demo',
+        password: 'hashed_password',
+        email: 'demo@example.com',
+        firstName: 'Demo',
+        lastName: 'User',
+        phoneNumber: '',
+        bio: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    },
+    getUserByUsername: async () => {
+      console.log("Using mock getUserByUsername");
+      return {
+        id: 1,
+        username: 'demo',
+        password: 'hashed_password',
+        email: 'demo@example.com',
+        firstName: 'Demo',
+        lastName: 'User',
+        phoneNumber: '',
+        bio: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    },
+    getUserByEmail: async () => {
+      console.log("Using mock getUserByEmail");
+      return {
+        id: 1,
+        username: 'demo',
+        password: 'hashed_password',
+        email: 'demo@example.com',
+        firstName: 'Demo',
+        lastName: 'User',
+        phoneNumber: '',
+        bio: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    },
+    createUser: async (userData) => {
+      console.log("Using mock createUser", userData);
+      return {
+        id: 1,
+        ...userData,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as User;
+    },
+    updateUserProfile: async (userId, profileData) => {
+      console.log("Using mock updateUserProfile", userId, profileData);
+      return {
+        id: userId,
+        username: 'demo',
+        password: 'hashed_password',
+        email: profileData.email,
+        firstName: profileData.firstName,
+        lastName: profileData.lastName || '',
+        phoneNumber: profileData.phoneNumber || '',
+        bio: profileData.bio || null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    },
+    updateUserPassword: async (userId, newPasswordHash) => {
+      console.log("Using mock updateUserPassword", userId, newPasswordHash);
+    },
+    
+    // Trip methods
+    getTrip: async (id) => {
+      console.log("Using mock getTrip", id);
+      return {
+        id,
+        userId: 1,
+        name: 'Mock Trip',
+        description: 'This is a mock trip',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    },
+    getTripsByUserId: async () => {
+      console.log("Using mock getTripsByUserId");
+      return [{
+        id: 1,
+        userId: 1,
+        name: 'Mock Trip 1',
+        description: 'This is mock trip 1',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }];
+    },
+    createTrip: async (tripData) => {
+      console.log("Using mock createTrip", tripData);
+      return {
+        id: 1,
+        ...tripData,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as Trip;
+    },
+    updateTrip: async (id, tripData) => {
+      console.log("Using mock updateTrip", id, tripData);
+      return {
+        id,
+        userId: 1,
+        name: tripData.name || 'Mock Trip',
+        description: tripData.description || 'This is a mock trip',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    },
+    deleteTrip: async (id) => {
+      console.log("Using mock deleteTrip", id);
+    },
+    
+    // Expense methods
+    getExpense: async (id) => {
+      console.log("Using mock getExpense", id);
+      return {
+        id,
+        userId: 1,
+        tripName: 'Mock Trip',
+        date: new Date().toISOString(),
+        type: 'Food',
+        vendor: 'Mock Vendor',
+        location: 'Mock Location',
+        cost: 100,
+        comments: 'Mock comments',
+        receiptPath: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    },
+    getExpensesByUserId: async () => {
+      console.log("Using mock getExpensesByUserId");
+      return [{
+        id: 1,
+        userId: 1,
+        tripName: 'Mock Trip',
+        date: new Date().toISOString(),
+        type: 'Food',
+        vendor: 'Mock Vendor',
+        location: 'Mock Location',
+        cost: 100,
+        comments: 'Mock comments',
+        receiptPath: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }];
+    },
+    getExpensesByTripName: async () => {
+      console.log("Using mock getExpensesByTripName");
+      return [{
+        id: 1,
+        userId: 1,
+        tripName: 'Mock Trip',
+        date: new Date().toISOString(),
+        type: 'Food',
+        vendor: 'Mock Vendor',
+        location: 'Mock Location',
+        cost: 100,
+        comments: 'Mock comments',
+        receiptPath: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }];
+    },
+    createExpense: async (expenseData) => {
+      console.log("Using mock createExpense", expenseData);
+      return {
+        id: 1,
+        ...expenseData,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as Expense;
+    },
+    updateExpense: async (id, expenseData) => {
+      console.log("Using mock updateExpense", id, expenseData);
+      return {
+        id,
+        userId: 1,
+        tripName: 'Mock Trip',
+        date: expenseData.date || new Date().toISOString(),
+        type: expenseData.type || 'Food',
+        vendor: expenseData.vendor || 'Mock Vendor',
+        location: expenseData.location || 'Mock Location',
+        cost: expenseData.cost || 100,
+        comments: expenseData.comments || 'Mock comments',
+        receiptPath: expenseData.receiptPath || null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    },
+    deleteExpense: async (id) => {
+      console.log("Using mock deleteExpense", id);
+    },
+    
+    // Mileage Log methods
+    getMileageLogById: async (id) => {
+      console.log("Using mock getMileageLogById", id);
+      return {
+        id,
+        userId: 1,
+        tripId: 1,
+        tripDate: new Date(),
+        startOdometer: '10000',
+        endOdometer: '10100',
+        calculatedDistance: '100',
+        purpose: 'Mock purpose',
+        startImageUrl: null,
+        endImageUrl: null,
+        entryMethod: 'manual',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    },
+    getMileageLogsByUserId: async () => {
+      console.log("Using mock getMileageLogsByUserId");
+      return [{
+        id: 1,
+        userId: 1,
+        tripId: 1,
+        tripDate: new Date(),
+        startOdometer: '10000',
+        endOdometer: '10100',
+        calculatedDistance: '100',
+        purpose: 'Mock purpose',
+        startImageUrl: null,
+        endImageUrl: null,
+        entryMethod: 'manual',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }];
+    },
+    createMileageLog: async (logData) => {
+      console.log("Using mock createMileageLog", logData);
+      return {
+        id: 1,
+        userId: logData.userId,
+        tripId: logData.tripId || null,
+        tripDate: logData.tripDate,
+        startOdometer: String(logData.startOdometer),
+        endOdometer: String(logData.endOdometer),
+        calculatedDistance: String(logData.calculatedDistance),
+        purpose: logData.purpose || null,
+        startImageUrl: logData.startImageUrl || null,
+        endImageUrl: logData.endImageUrl || null,
+        entryMethod: logData.entryMethod,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    },
+    updateMileageLog: async (id, logData) => {
+      console.log("Using mock updateMileageLog", id, logData);
+      return {
+        id,
+        userId: 1,
+        tripId: logData.tripId || null,
+        tripDate: logData.tripDate || new Date(),
+        startOdometer: logData.startOdometer ? String(logData.startOdometer) : '10000',
+        endOdometer: logData.endOdometer ? String(logData.endOdometer) : '10100',
+        calculatedDistance: logData.calculatedDistance ? String(logData.calculatedDistance) : '100',
+        purpose: logData.purpose || 'Mock purpose',
+        startImageUrl: logData.startImageUrl || null,
+        endImageUrl: logData.endImageUrl || null,
+        entryMethod: logData.entryMethod || 'manual',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    },
+    deleteMileageLog: async (id) => {
+      console.log("Using mock deleteMileageLog", id);
+    }
+  };
+  
+  return mockStorage;
 }

@@ -6,7 +6,11 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
 
 if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('Missing Supabase environment variables');
+  console.error('FATAL ERROR: Missing Supabase environment variables (SUPABASE_URL, SUPABASE_SERVICE_KEY)');
+  if (process.env.NODE_ENV === 'production') {
+    // In production, exit the process if Supabase credentials are missing
+    process.exit(1);
+  }
 }
 
 const supabase = createClient(
@@ -14,19 +18,28 @@ const supabase = createClient(
   supabaseServiceKey || ''
 );
 
+// Initialize buckets on startup
+if (process.env.NODE_ENV === 'production') {
+  ensureStorageBuckets().catch(err => {
+    console.error('Failed to initialize storage buckets:', err);
+  });
+}
+
 // Storage bucket name
 const RECEIPTS_BUCKET = 'receipts';
 const ODOMETER_BUCKET = 'odometer-images';
 
 // Ensure buckets exist (call this during app initialization)
 export async function ensureStorageBuckets() {
+  console.log('Ensuring storage buckets exist...');
   try {
     // Check if receipts bucket exists
     const { data: receiptsBucket, error: receiptsError } = await supabase
       .storage
       .getBucket(RECEIPTS_BUCKET);
     
-    if (!receiptsBucket && receiptsError) {
+    if (!receiptsBucket) {
+      console.log(`Receipts bucket '${RECEIPTS_BUCKET}' not found, creating...`);
       // Create receipts bucket if it doesn't exist
       const { error } = await supabase.storage.createBucket(RECEIPTS_BUCKET, {
         public: false,
@@ -36,9 +49,12 @@ export async function ensureStorageBuckets() {
       
       if (error) {
         console.error('Error creating receipts bucket:', error);
+        throw new Error(`Failed to create receipts bucket: ${error.message}`);
       } else {
-        console.log('Created receipts bucket');
+        console.log(`Created receipts bucket '${RECEIPTS_BUCKET}' successfully`);
       }
+    } else {
+      console.log(`Receipts bucket '${RECEIPTS_BUCKET}' already exists`);
     }
 
     // Check if odometer bucket exists
@@ -46,7 +62,8 @@ export async function ensureStorageBuckets() {
       .storage
       .getBucket(ODOMETER_BUCKET);
     
-    if (!odometerBucket && odometerError) {
+    if (!odometerBucket) {
+      console.log(`Odometer bucket '${ODOMETER_BUCKET}' not found, creating...`);
       // Create odometer bucket if it doesn't exist
       const { error } = await supabase.storage.createBucket(ODOMETER_BUCKET, {
         public: false,
@@ -56,12 +73,22 @@ export async function ensureStorageBuckets() {
       
       if (error) {
         console.error('Error creating odometer bucket:', error);
+        throw new Error(`Failed to create odometer bucket: ${error.message}`);
       } else {
-        console.log('Created odometer bucket');
+        console.log(`Created odometer bucket '${ODOMETER_BUCKET}' successfully`);
       }
+    } else {
+      console.log(`Odometer bucket '${ODOMETER_BUCKET}' already exists`);
     }
+    
+    console.log('Storage buckets verification complete');
+    return true;
   } catch (error) {
     console.error('Error ensuring storage buckets:', error);
+    if (process.env.NODE_ENV === 'production') {
+      throw error; // In production, propagate the error
+    }
+    return false;
   }
 }
 
@@ -75,6 +102,9 @@ export async function uploadReceipt(
     // Generate a unique file name to avoid collisions
     const fileExt = fileName.split('.').pop();
     const uniqueFileName = `${userId}/${uuidv4()}.${fileExt}`;
+    
+    // Ensure the bucket exists before uploading
+    await ensureStorageBuckets();
     
     const { data, error } = await supabase
       .storage
@@ -95,6 +125,7 @@ export async function uploadReceipt(
       .from(RECEIPTS_BUCKET)
       .getPublicUrl(uniqueFileName);
     
+    console.log(`Receipt uploaded successfully: ${urlData.publicUrl}`);
     return urlData.publicUrl;
   } catch (error) {
     console.error('Error in uploadReceipt:', error);
@@ -112,6 +143,9 @@ export async function uploadOdometerImage(
     // Generate a unique file name to avoid collisions
     const fileExt = fileName.split('.').pop();
     const uniqueFileName = `${userId}/${uuidv4()}.${fileExt}`;
+    
+    // Ensure the bucket exists before uploading
+    await ensureStorageBuckets();
     
     const { data, error } = await supabase
       .storage
@@ -132,6 +166,7 @@ export async function uploadOdometerImage(
       .from(ODOMETER_BUCKET)
       .getPublicUrl(uniqueFileName);
     
+    console.log(`Odometer image uploaded successfully: ${urlData.publicUrl}`);
     return urlData.publicUrl;
   } catch (error) {
     console.error('Error in uploadOdometerImage:', error);

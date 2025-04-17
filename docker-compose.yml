@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:16-alpine
+    container_name: expense-tracker-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-expense_tracker}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Supabase storage (for file storage)
+  supabase:
+    image: supabase/storage-api:latest
+    container_name: expense-tracker-storage
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_CONNECTION: postgresql://postgres:postgres@postgres:5432/expense_tracker
+      REGION: ${SUPABASE_REGION:-us-east-1}
+      GLOBAL_S3_BUCKET: ${SUPABASE_BUCKET:-expense-tracker}
+      TENANT_ID: ${SUPABASE_TENANT_ID:-expense-tracker}
+      POSTGREST_URL: http://postgres:5432
+      PGRST_JWT_SECRET: ${JWT_SECRET:-your_secure_jwt_secret_here}
+      FILE_SIZE_LIMIT: 10485760
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+    volumes:
+      - supabase-data:/var/lib/storage
+    ports:
+      - "9000:9000"
+
+  # Expense Tracker application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: expense-tracker-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      supabase:
+        condition: service_started
+    environment:
+      # Database
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/expense_tracker
+      # Supabase
+      SUPABASE_URL: http://supabase:9000
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-your_supabase_service_key_here}
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:-your_secure_jwt_secret_here}
+      JWT_EXPIRY: 7d
+      # OCR
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-your_gemini_api_key_here}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      DEFAULT_OCR_METHOD: gemini
+      OCR_TEMPLATE: general
+      # Node
+      NODE_ENV: production
+      PORT: 5000
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./app-config.json:/app/app-config.json
+      - ./uploads:/app/uploads
+
+volumes:
+  postgres-data:
+  supabase-data:

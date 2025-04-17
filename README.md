@@ -1,68 +1,53 @@
 # Expense Tracker Application
 
-A full-stack expense tracking application with receipt OCR processing, trip management, and mileage logging capabilities. This application is optimized for Vercel deployment with serverless API routes.
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Foghenetejiriorukpegmail%2FexpenseTracker_vercel_sonnet37)
+A full-stack expense tracking application with receipt image upload and OCR processing capabilities.
 
 ## Features
 
-- User authentication with JWT
+- User authentication and authorization
 - Trip management
 - Expense tracking with receipt uploads
-- OCR processing for receipts
-- Mileage logging
-- Data export to Excel
-- Responsive UI with dark/light mode
+- OCR processing of receipt images to extract expense information
+- Mileage tracking
+- Data export
 
-## Tech Stack
+## Technology Stack
 
-- **Frontend**: React, TailwindCSS, Shadcn UI components
-- **Backend**: Next.js API routes (serverless functions)
-- **Database**: PostgreSQL via Supabase (using Drizzle ORM)
-- **Authentication**: JWT-based authentication
-- **File Storage**: Supabase Storage
-- **OCR Processing**: Multiple providers supported (OpenAI, Google Gemini, Anthropic Claude, OpenRouter)
-- **Deployment**: Vercel
+- **Frontend**: Next.js, React, Tailwind CSS
+- **Backend**: Express.js, Node.js
+- **Database**: PostgreSQL with Drizzle ORM
+- **Storage**: Supabase Storage
+- **OCR**: Multiple providers supported (Gemini, OpenAI, Claude, OpenRouter)
+- **Containerization**: Docker, Docker Compose
 
-## Deployment to Vercel
+## Prerequisites
 
-### Prerequisites
+- Node.js 18+ and npm
+- PostgreSQL database
+- Supabase account for storage (or self-hosted Supabase)
+- At least one OCR API key (Gemini, OpenAI, Claude, or OpenRouter)
 
-1. A Vercel account (free tier is sufficient)
-2. A Supabase account (free tier is sufficient)
-3. At least one API key for OCR processing (OpenAI, Google Gemini, Anthropic Claude, or OpenRouter)
+## Environment Setup
 
-### Setup Supabase
-
-1. Create a new Supabase project
-2. Create a PostgreSQL database using the SQL schema in the `migrations` directory
-3. Create two storage buckets:
-   - `receipts` - for storing receipt images
-   - `odometer-images` - for storing odometer images
-4. Set the appropriate permissions for the buckets (authenticated users can read/write)
-5. Get your Supabase URL and service key from the project settings
-
-### Environment Variables
-
-Set the following environment variables in your Vercel project:
+Create a `.env` file in the root directory with the following variables:
 
 ```
-# Database
-DATABASE_URL=postgres://username:password@host:port/database
+# Database Configuration
+DATABASE_URL=your_postgres_connection_string_here
 
-# Authentication
-JWT_SECRET=your-jwt-secret-key
+# JWT Authentication
+JWT_SECRET=your_secure_jwt_secret_here
 JWT_EXPIRY=7d
 
 # Supabase Storage
-SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_SERVICE_KEY=your-supabase-service-key
+SUPABASE_URL=your_supabase_url_here
+SUPABASE_SERVICE_KEY=your_supabase_service_key_here
 
 # OCR API Keys (at least one is required)
-OPENAI_API_KEY=your-openai-api-key
-GEMINI_API_KEY=your-gemini-api-key
-ANTHROPIC_API_KEY=your-anthropic-api-key
-OPENROUTER_API_KEY=your-openrouter-api-key
+GEMINI_API_KEY=your_gemini_api_key_here
+# OPENAI_API_KEY=your_openai_api_key_here
+# ANTHROPIC_API_KEY=your_anthropic_api_key_here
+# OPENROUTER_API_KEY=your_openrouter_api_key_here
 
 # OCR Settings
 DEFAULT_OCR_METHOD=gemini
@@ -72,172 +57,80 @@ OCR_TEMPLATE=general
 NODE_ENV=production
 ```
 
-### Detailed Deployment Steps
+## Configuration
 
-1. **Prepare Your Repository**
-   - Fork or clone this repository to your GitHub account
-   - Push any changes you've made to your repository
+Create an `app-config.json` file in the root directory:
 
-2. **Connect to Vercel**
-   - Log in to your Vercel account
-   - Click "Add New" > "Project"
-   - Select your GitHub repository
-   - Click "Import"
-
-3. **Configure Project Settings**
-   - Project Name: Choose a name for your project
-   - Framework Preset: Select "Next.js"
-   - Root Directory: Leave as default (/)
-   - Build Command: Leave as default (next build)
-   - Output Directory: Leave as default (.next)
-
-4. **Configure Environment Variables**
-   - In the Vercel project settings, go to the "Environment Variables" tab
-   - Add all the required environment variables listed above
-   - Make sure to set the correct values for your Supabase project
-
-5. **Deploy the Application**
-   - Click "Deploy"
-   - Wait for the build and deployment to complete
-   - Once deployed, Vercel will provide you with a URL for your application
-
-6. **Run Database Migrations**
-   - After deployment, you need to run the database migrations
-   - Install Vercel CLI: `npm i -g vercel`
-   - Log in to Vercel CLI: `vercel login`
-   - Pull environment variables: `vercel env pull .env.local`
-   - Run migrations: `npm run db:migrate`
-
-7. **Verify Deployment**
-   - Visit your application URL
-   - Register a new account
-   - Test the core functionality (adding expenses, trips, etc.)
-
-### Free Tier Limitations
-
-When using the free tiers of Vercel and Supabase, be aware of the following limitations:
-
-#### Vercel Free Tier Limitations
-- Serverless Function Execution: Limited to 10-60 seconds
-- Serverless Function Size: Limited bundle size
-- Bandwidth: Limited monthly bandwidth
-- Build Duration: Limited build minutes per month
-
-#### Supabase Free Tier Limitations
-- Database Size: Limited to 500MB
-- Storage: Limited to 1GB
-- Bandwidth: Limited egress bandwidth
-- Concurrent Connections: Limited number of database connections
-
-## Local Development
-
-1. Clone the repository
-2. Install dependencies: `npm install`
-3. Create a `.env` file based on `.env.example`
-4. Run the database migrations: `npm run db:migrate`
-5. Start the development server: `npm run dev`
-6. Open [http://localhost:3000](http://localhost:3000) in your browser
-
-## Project Structure
-
-```
-├── api/                  # API routes (serverless functions)
-│   ├── _lib/             # Shared library code for API routes
-│   ├── auth/             # Authentication endpoints
-│   ├── expenses/         # Expense management endpoints
-│   ├── mileage-logs/     # Mileage logging endpoints
-│   ├── ocr/              # OCR processing endpoints
-│   ├── settings/         # Settings management endpoints
-│   └── trips/            # Trip management endpoints
-├── client/               # Frontend React application
-│   ├── src/
-│   │   ├── components/   # React components
-│   │   ├── hooks/        # Custom React hooks
-│   │   ├── lib/          # Utility functions
-│   │   └── pages/        # Page components
-├── migrations/           # Database migration files
-├── scripts/              # Utility scripts
-└── shared/               # Shared code between frontend and API
+```json
+{
+  "ocrApiKeys": {
+    "gemini": "your_gemini_api_key_here"
+  },
+  "defaultOcrMethod": "gemini",
+  "ocrTemplate": "travel"
+}
 ```
 
-## API Endpoints
+## Installation
 
-### Authentication
-- `POST /api/auth/register` - Register a new user
-- `POST /api/auth/login` - Log in a user
-- `POST /api/auth/logout` - Log out a user
-- `GET /api/auth/user` - Get current user information
-- `PUT /api/auth/update-profile` - Update user profile
-- `PUT /api/auth/change-password` - Change user password
+### Option 1: Local Installation
 
-### Trips
-- `GET /api/trips` - Get all trips
-- `POST /api/trips` - Create a new trip
-- `GET /api/trips/[id]` - Get a specific trip
-- `PUT /api/trips/[id]` - Update a trip
-- `DELETE /api/trips/[id]` - Delete a trip
+1. Install dependencies:
+   ```
+   npm install
+   ```
 
-### Expenses
-- `GET /api/expenses` - Get all expenses
-- `POST /api/expenses` - Create a new expense
-- `GET /api/expenses/[id]` - Get a specific expense
-- `PUT /api/expenses/[id]` - Update an expense
-- `DELETE /api/expenses/[id]` - Delete an expense
-- `POST /api/expenses/upload` - Upload a receipt
-- `POST /api/expenses/batch-process` - Process multiple expenses
-- `GET /api/expenses/export` - Export expenses to Excel
+2. Build the application:
+   ```
+   npm run build
+   ```
 
-### Mileage Logs
-- `GET /api/mileage-logs` - Get all mileage logs
-- `POST /api/mileage-logs` - Create a new mileage log
-- `GET /api/mileage-logs/[id]` - Get a specific mileage log
-- `PUT /api/mileage-logs/[id]` - Update a mileage log
-- `DELETE /api/mileage-logs/[id]` - Delete a mileage log
-- `POST /api/mileage-logs/upload-odometer` - Upload an odometer image
+3. Run database migrations:
+   ```
+   npm run db:migrate
+   ```
 
-### OCR
-- `POST /api/ocr/process` - Process an image with OCR
+4. Start the application in production mode:
+   ```
+   npm run start:prod
+   ```
 
-## Troubleshooting
+### Option 2: Docker Installation
 
-### Common Issues
+1. Make sure Docker and Docker Compose are installed on your system.
 
-1. **Database Connection Issues**
-   - Verify your DATABASE_URL is correct
-   - Check if your IP is allowed in Supabase's database settings
-   - Ensure your database is not paused (free tier limitation)
+2. Build and start the containers:
+   ```
+   docker-compose up -d
+   ```
 
-2. **Storage Issues**
-   - Verify your SUPABASE_URL and SUPABASE_SERVICE_KEY
-   - Check if the storage buckets exist and have correct permissions
-   - Ensure you haven't exceeded storage limits
+3. The application will be available at http://localhost:5000
 
-3. **OCR Processing Issues**
-   - Verify your OCR API keys
-   - Check if you've set DEFAULT_OCR_METHOD correctly
-   - Ensure the image format is supported (JPEG, PNG, PDF)
+## Development
 
-4. **Deployment Issues**
-   - Check Vercel build logs for errors
-   - Verify all environment variables are set correctly
-   - Ensure your project is compatible with Vercel's serverless architecture
+1. Install dependencies:
+   ```
+   npm install
+   ```
 
-### Getting Help
+2. Start the development server:
+   ```
+   npm run dev
+   ```
 
-If you encounter issues not covered here, please:
-1. Check the GitHub repository issues
-2. Create a new issue with detailed information about your problem
-3. Include error messages, screenshots, and steps to reproduce
+3. In a separate terminal, start the Express server:
+   ```
+   npm run start:server
+   ```
 
-## Contributing
+## Testing OCR with Sample Receipt
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+The application includes a sample receipt image (`Receipt sample.jpg`) that you can use to test the OCR functionality:
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+1. Log in to the application
+2. Create a new trip
+3. Add a new expense and upload the sample receipt
+4. Enable OCR processing to extract information from the receipt
 
 ## License
 

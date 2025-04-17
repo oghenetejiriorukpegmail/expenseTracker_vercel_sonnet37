@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Endpoint Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .endpoint-test {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>API Endpoint Direct Access Test</h1>
+    <p>This page tests direct access to API endpoints without going through the React app.</p>
+
+    <div class="endpoint-test">
+        <h2>Authentication Endpoints</h2>
+        <button onclick="testEndpoint('/api/auth/login', 'POST', {username: 'testuser', password: 'testpassword'})">Test Login</button>
+        <button onclick="testEndpoint('/api/auth/register', 'POST', {username: 'newtestuser', password: 'testpassword'})">Test Register</button>
+        <button onclick="testEndpoint('/api/auth/user', 'GET')">Test Get User</button>
+        <pre id="auth-result">Results will appear here...</pre>
+    </div>
+
+    <div class="endpoint-test">
+        <h2>Trip Endpoints</h2>
+        <button onclick="testEndpoint('/api/trips', 'GET')">Get Trips</button>
+        <button onclick="testEndpoint('/api/trips', 'POST', {name: 'Test Trip', description: 'Test Description'})">Create Trip</button>
+        <pre id="trip-result">Results will appear here...</pre>
+    </div>
+
+    <div class="endpoint-test">
+        <h2>Expense Endpoints</h2>
+        <button onclick="testEndpoint('/api/expenses', 'GET')">Get Expenses</button>
+        <pre id="expense-result">Results will appear here...</pre>
+    </div>
+
+    <script>
+        // Store the token after login/register
+        let authToken = '';
+
+        async function testEndpoint(url, method = 'GET', body = null) {
+            const resultId = url.includes('auth') ? 'auth-result' : 
+                            url.includes('trips') ? 'trip-result' : 'expense-result';
+            const resultElement = document.getElementById(resultId);
+            
+            resultElement.textContent = `Testing ${method} ${url}...`;
+            
+            try {
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                
+                // Add auth token if available
+                if (authToken && !url.includes('/api/auth/login') && !url.includes('/api/auth/register')) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
+                const options = {
+                    method,
+                    headers,
+                    credentials: 'include' // Include cookies
+                };
+                
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+                
+                const response = await fetch(url, options);
+                
+                // Try to parse as JSON first
+                let data;
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    // If not JSON, get as text
+                    data = await response.text();
+                }
+                
+                // Save token if login/register was successful
+                if ((url.includes('/api/auth/login') || url.includes('/api/auth/register')) && 
+                    response.ok && data.token) {
+                    authToken = data.token;
+                    console.log('Token saved:', authToken);
+                }
+                
+                // Format the result
+                const result = {
+                    status: response.status,
+                    statusText: response.statusText,
+                    data
+                };
+                
+                resultElement.textContent = JSON.stringify(result, null, 2);
+            } catch (error) {
+                resultElement.textContent = `Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

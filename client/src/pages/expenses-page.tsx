@@ -148,7 +148,8 @@ export default function ExpensesPage() {
               comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
               break;
             case "cost":
-              comparison = a.cost - b.cost;
+              // Ensure cost is treated as a number for comparison
+              comparison = parseFloat(String(a.cost)) - parseFloat(String(b.cost));
               break;
             case "vendor":
               comparison = a.vendor.localeCompare(b.vendor);

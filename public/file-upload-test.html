@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Tracker File Upload Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        h2 {
+            margin-top: 0;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Expense Tracker File Upload Test</h1>
+    
+    <div class="section">
+        <h2>Authentication</h2>
+        <div>
+            <label for="username">Username:</label>
+            <input type="text" id="username" value="testuser">
+            
+            <label for="password">Password:</label>
+            <input type="password" id="password" value="testpassword">
+            
+            <button onclick="login()">Login</button>
+            <button onclick="logout()">Logout</button>
+        </div>
+        <pre id="auth-result">Results will appear here...</pre>
+    </div>
+    
+    <div class="section">
+        <h2>Expense Upload Test</h2>
+        <form id="expense-upload-form">
+            <div class="form-group">
+                <label for="receipt">Receipt Image:</label>
+                <input type="file" id="receipt" name="receipt" accept="image/jpeg,image/png,image/gif,application/pdf">
+            </div>
+            
+            <div class="form-group">
+                <label for="date">Date:</label>
+                <input type="date" id="date" name="date" value="2025-04-17">
+            </div>
+            
+            <div class="form-group">
+                <label for="cost">Cost:</label>
+                <input type="number" id="cost" name="cost" step="0.01" value="150.75">
+            </div>
+            
+            <div class="form-group">
+                <label for="type">Type:</label>
+                <select id="type" name="type">
+                    <option value="meal" selected>Meal</option>
+                    <option value="transportation">Transportation</option>
+                    <option value="accommodation">Accommodation</option>
+                    <option value="entertainment">Entertainment</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="vendor">Vendor:</label>
+                <input type="text" id="vendor" name="vendor" value="Restaurant ABC">
+            </div>
+            
+            <div class="form-group">
+                <label for="location">Location:</label>
+                <input type="text" id="location" name="location" value="New York">
+            </div>
+            
+            <div class="form-group">
+                <label for="tripName">Trip Name:</label>
+                <input type="text" id="tripName" name="tripName" value="Business Trip to New York">
+            </div>
+            
+            <div class="form-group">
+                <label for="comments">Comments:</label>
+                <textarea id="comments" name="comments">Dinner with clients</textarea>
+            </div>
+            
+            <button type="button" onclick="uploadExpense()">Upload Expense</button>
+        </form>
+        <pre id="expense-result">Results will appear here...</pre>
+    </div>
+    
+    <div class="section">
+        <h2>OCR Processing Test</h2>
+        <form id="ocr-form">
+            <div class="form-group">
+                <label for="ocr-receipt">Receipt Image:</label>
+                <input type="file" id="ocr-receipt" name="receipt" accept="image/jpeg,image/png,image/gif,application/pdf">
+            </div>
+            
+            <div class="form-group">
+                <label for="ocr-method">OCR Method (Optional):</label>
+                <select id="ocr-method" name="method">
+                    <option value="">Default</option>
+                    <option value="tesseract">Tesseract</option>
+                    <option value="gemini">Gemini</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="claude">Claude</option>
+                </select>
+            </div>
+            
+            <button type="button" onclick="processOCR()">Process OCR</button>
+        </form>
+        <pre id="ocr-result">Results will appear here...</pre>
+    </div>
+    
+    <script>
+        let token = '';
+        
+        // Authentication functions
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                document.getElementById('auth-result').textContent = JSON.stringify(data, null, 2);
+                
+                if (response.ok && data.token) {
+                    token = data.token;
+                    console.log('Token saved:', token);
+                }
+            } catch (error) {
+                document.getElementById('auth-result').textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        async function logout() {
+            try {
+                const response = await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.text();
+                document.getElementById('auth-result').textContent = data || 'Logged out successfully';
+                token = '';
+            } catch (error) {
+                document.getElementById('auth-result').textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        // Expense upload function
+        async function uploadExpense() {
+            if (!token) {
+                document.getElementById('expense-result').textContent = 'Please login first';
+                return;
+            }
+            
+            const form = document.getElementById('expense-upload-form');
+            const formData = new FormData();
+            
+            // Get the receipt file
+            const receiptFile = document.getElementById('receipt').files[0];
+            if (!receiptFile) {
+                document.getElementById('expense-result').textContent = 'Please select a receipt file';
+                return;
+            }
+            formData.append('receipt', receiptFile);
+            
+            // Add other form fields
+            formData.append('date', document.getElementById('date').value);
+            formData.append('cost', document.getElementById('cost').value);
+            formData.append('type', document.getElementById('type').value);
+            formData.append('vendor', document.getElementById('vendor').value);
+            formData.append('location', document.getElementById('location').value);
+            formData.append('tripName', document.getElementById('tripName').value);
+            formData.append('comments', document.getElementById('comments').value);
+            
+            try {
+                const response = await fetch('/api/expenses/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+                
+                const resultElement = document.getElementById('expense-result');
+                
+                try {
+                    const data = await response.json();
+                    resultElement.textContent = `Status: ${response.status}\n\n${JSON.stringify(data, null, 2)}`;
+                } catch (e) {
+                    const text = await response.text();
+                    resultElement.textContent = `Status: ${response.status}\n\n${text}`;
+                }
+            } catch (error) {
+                document.getElementById('expense-result').textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        // OCR processing function
+        async function processOCR() {
+            if (!token) {
+                document.getElementById('ocr-result').textContent = 'Please login first';
+                return;
+            }
+            
+            const formData = new FormData();
+            
+            // Get the receipt file
+            const receiptFile = document.getElementById('ocr-receipt').files[0];
+            if (!receiptFile) {
+                document.getElementById('ocr-result').textContent = 'Please select a receipt file';
+                return;
+            }
+            formData.append('receipt', receiptFile);
+            
+            // Add OCR method if selected
+            const method = document.getElementById('ocr-method').value;
+            if (method) {
+                formData.append('method', method);
+            }
+            
+            try {
+                const response = await fetch('/api/ocr/process', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+                
+                const resultElement = document.getElementById('ocr-result');
+                
+                try {
+                    const data = await response.json();
+                    resultElement.textContent = `Status: ${response.status}\n\n${JSON.stringify(data, null, 2)}`;
+                } catch (e) {
+                    const text = await response.text();
+                    resultElement.textContent = `Status: ${response.status}\n\n${text}`;
+                }
+            } catch (error) {
+                document.getElementById('ocr-result').textContent = 'Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
