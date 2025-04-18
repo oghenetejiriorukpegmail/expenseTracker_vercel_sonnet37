@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { useModalStore } from "@/lib/store";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { UploadCloud, Car } from "lucide-react"; // Import UploadCloud and Car icons
+import { UploadCloud, Car, PlusIcon } from "lucide-react"; // Import UploadCloud, Car, and PlusIcon icons
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"; // Import DropdownMenu components
 
 import type { Trip } from "@shared/schema"; // Import the full Trip type
 
@@ -155,64 +156,61 @@ export default function TripCard({ trip }: TripCardProps) {
           </AlertDialog>
         </div>
       </div>
-      <div className="mt-3 pt-3 border-t dark:border-gray-700 flex justify-between items-center">
+      <div className="mt-3 pt-3 pb-2 border-t dark:border-gray-700 flex justify-between items-center"> {/* Added pb-2 for padding at the bottom */}
         <div>
           <span className="font-medium">${totalSpent}</span>
           <span className="text-gray-500 dark:text-gray-400 text-sm ml-1">total</span>
         </div>
-        <div className="space-x-2">
-          <Button 
-            size="sm" 
-            className="px-2.5 py-1 text-xs bg-primary text-white rounded hover:bg-blue-600" 
+        <div className="flex flex-wrap gap-2 items-center"> {/* Use flex-wrap and gap for better responsiveness */}
+          <Button
+            variant="default" // Use default variant for primary action
+            size="sm"
             onClick={handleAddExpense}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
+            <PlusIcon className="h-3.5 w-3.5 mr-1" /> {/* Use PlusIcon for consistency */}
             Add Expense
           </Button>
           {/* Add Mileage Button */}
           <Button
+            variant="secondary" // Use secondary variant
             size="sm"
-            className="px-2.5 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
-            // Call the store function to open the modal, passing the tripId
             onClick={() => toggleAddEditMileageLog({ tripId: trip.id })}
           >
             <Car className="h-3.5 w-3.5 mr-1" />
             + Mileage
           </Button>
 
-          {/* Change Button to an <a> tag styled as a button */}
-          <Button
-            size="sm"
-            variant="outline"
-            className={`px-2.5 py-1 text-xs ${expenseCount === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-            asChild // Important: Allows Button styling on the child <a> tag
-            disabled={expenseCount === 0} // Disable visually if no expenses
-          >
-            <a
-              href={expenseCount > 0 ? `/api/export-expenses?tripName=${encodeURIComponent(trip.name)}` : undefined}
-              download // Let the browser handle the filename from Content-Disposition
-              target="_blank" // Optional: attempt to open in new tab/window
-              rel="noopener noreferrer"
-              onClick={(e) => { if (expenseCount === 0) e.preventDefault(); }} // Prevent click if disabled
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              Export
-            </a>
-          </Button>
-          {/* Add Batch Upload Button */}
-          <Button
-            size="sm"
-            variant="outline"
-            className="px-2.5 py-1 text-xs"
-            onClick={() => toggleBatchUpload({ id: trip.id, name: trip.name })} // Pass trip id and name
-          >
-             <UploadCloud className="h-3.5 w-3.5 mr-1" />
-             Batch Upload
-          </Button>
+          {/* Dropdown for less frequent actions */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                More <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {/* Export Button */}
+              <DropdownMenuItem asChild disabled={expenseCount === 0}>
+                <a
+                  href={expenseCount > 0 ? `/api/export-expenses?tripName=${encodeURIComponent(trip.name)}` : undefined}
+                  download
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => { if (expenseCount === 0) e.preventDefault(); }}
+                  className="flex items-center" // Add flex and items-center for icon alignment
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Export
+                </a>
+              </DropdownMenuItem>
+              {/* Batch Upload Button */}
+              <DropdownMenuItem onClick={() => toggleBatchUpload({ id: trip.id, name: trip.name })} className="flex items-center"> {/* Add flex and items-center for icon alignment */}
+                 <UploadCloud className="h-3.5 w-3.5 mr-2" />
+                 Batch Upload
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </div>

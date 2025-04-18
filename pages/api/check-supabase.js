@@ -15,7 +15,15 @@ export default async function handler(req, res) {
     }
 
     // Initialize Supabase client
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Initialize Supabase client with proper configuration
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        persistSession: false
+      },
+      global: {
+        fetch: fetch.bind(globalThis)
+      }
+    });
 
     try {
       // Test connection by making a simple query

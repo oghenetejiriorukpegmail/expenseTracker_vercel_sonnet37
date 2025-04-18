@@ -29,6 +29,9 @@ export async function registerRoutes(app: Express, storage: IStorage): Promise<S
 
   // Serve uploaded files
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+  
+  // Serve static files from the public directory
+  app.use(express.static(path.join(process.cwd(), "public")));
 
   // --- Profile Routes ---
 
@@ -1261,6 +1264,102 @@ function guessExpensePurpose(text: string): string {
     }
   });
 
+  // Storage status endpoint - intentionally not protected by authentication
+  // This endpoint is used to verify the system's storage configuration
+  app.get("/api/system/storage-status", async (req, res, next) => {
+    try {
+      // Load configuration
+      const config = loadConfig();
+
+      // Determine if using Supabase or mock storage
+      // Check if we're using mock storage by examining the implementation of a method
+      let isMockStorage = false;
+      
+      // Create a temporary function to capture console.log output
+      const originalConsoleLog = console.log;
+      let capturedOutput = '';
+      
+      console.log = (message: string, ...args: any[]) => {
+        capturedOutput = message;
+      };
+      
+      // Call a method that would log "Using mock" if it's a mock implementation
+      try {
+        await storage.getUserById(0);
+      } catch (e) {
+        // Ignore errors, we're just checking the logging
+      }
+      
+      // Restore console.log
+      console.log = originalConsoleLog;
+      
+      // Check if the captured output indicates mock storage
+      isMockStorage = capturedOutput.includes('Using mock');
+      const storageType = isMockStorage ? 'Mock Storage' : 'Supabase Storage';
+      
+      // Get database connection status
+      let dbConnectionStatus = 'Connected';
+      let dbInfo = {};
+      
+      try {
+        // Test database connection by performing a simple query
+        // This will throw an error if the connection fails
+        if (!isMockStorage) {
+          // For Supabase storage, we can assume it's connected if we got this far
+          // since the storage initialization would have failed otherwise
+          dbInfo = {
+            url: process.env.DATABASE_URL ? maskDatabaseUrl(process.env.DATABASE_URL) : 'Not configured',
+            supabaseUrl: process.env.SUPABASE_URL ? maskUrl(process.env.SUPABASE_URL) : 'Not configured',
+          };
+        } else {
+          dbConnectionStatus = 'Not connected (using mock storage)';
+          dbInfo = {
+            message: 'Using mock storage - no database connection',
+          };
+        }
+      } catch (error) {
+        dbConnectionStatus = 'Error';
+        dbInfo = {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        };
+      }
+
+      // Return the storage status information
+      return res.status(200).json({
+        storageImplementation: storageType,
+        databaseConnectionStatus: dbConnectionStatus,
+        databaseInfo: dbInfo,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Error in storage-status endpoint:', error);
+      return res.status(500).json({
+        error: 'Failed to retrieve storage status',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  // Helper function to mask sensitive parts of the database URL
+  function maskDatabaseUrl(url: string): string {
+    try {
+      // Replace username and password in the URL
+      return url.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@');
+    } catch {
+      return 'Invalid URL format';
+    }
+  }
+
+  // Helper function to mask sensitive parts of any URL
+  function maskUrl(url: string): string {
+    try {
+      const urlObj = new URL(url);
+      // Only return the hostname and protocol
+      return `${urlObj.protocol}//${urlObj.hostname}`;
+    } catch {
+      return 'Invalid URL format';
+    }
+  }
 
   const httpServer = createServer(app);
 

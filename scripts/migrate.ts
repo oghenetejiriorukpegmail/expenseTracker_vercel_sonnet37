@@ -23,7 +23,10 @@ async function main() {
   
   try {
     // Create a postgres client
-    const client = postgres(dbUrl, { max: 1 });
+    const client = postgres(dbUrl, {
+      max: 1,
+      ssl: true // Force SSL to be enabled
+    });
     
     // Create a drizzle instance
     const db = drizzle(client);

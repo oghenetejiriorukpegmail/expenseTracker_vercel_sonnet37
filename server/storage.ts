@@ -7,12 +7,15 @@ const MemoryStore = createMemoryStore(session);
 
 // Define the storage interface
 export interface IStorage {
+  // Flag to identify if using mock storage
+  isMockStorage?: boolean;
+  
   // User methods
   getUserById(id: number): Promise<User | undefined>; // Renamed from getUser
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>; // Add getUserByEmail
   createUser(user: InsertUser): Promise<User>;
-  updateUserProfile(userId: number, profileData: { firstName: string; email: string; bio?: string | null }): Promise<User | undefined>; // Add updateUserProfile
+  updateUserProfile(userId: number, profileData: { firstName: string; lastName?: string | null; phoneNumber?: string | null; email: string; bio?: string | null }): Promise<User | undefined>; // Add updateUserProfile
   updateUserPassword(userId: number, newPasswordHash: string): Promise<void>; // Add updateUserPassword
   
   // Trip methods

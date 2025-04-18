@@ -83,8 +83,8 @@ try {
 // Start the application
 console.log('Starting the application in production mode...');
 try {
-  // Start both the Next.js frontend and Express backend
-  execSync('npm run start', { stdio: 'inherit' });
+  // Start both the Next.js frontend and Express backend using the same approach as development
+  execSync('npm run start:all', { stdio: 'inherit' });
 } catch (error) {
   console.error('Application crashed:', error.message);
   process.exit(1);

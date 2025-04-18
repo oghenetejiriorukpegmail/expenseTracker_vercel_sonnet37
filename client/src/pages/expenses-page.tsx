@@ -243,9 +243,9 @@ export default function ExpensesPage() {
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead>
-                  <tr className="bg-gray-50 dark:bg-gray-700/50 border-b dark:border-gray-700">
+                  <tr className="bg-muted dark:bg-muted/50 border-b"> {/* Use muted background for header */}
                     <th
-                      className="text-left py-3 px-4 font-medium text-xs uppercase text-gray-500 dark:text-gray-400 cursor-pointer"
+                      className="text-left py-3 px-4 font-semibold text-xs uppercase text-muted-foreground cursor-pointer"
                       onClick={() => {
                         if (sortField === "date") {
                           setSortDirection(sortDirection === "asc" ? "desc" : "asc");
@@ -263,7 +263,7 @@ export default function ExpensesPage() {
                       </div>
                     </th>
                     <th
-                      className="text-left py-3 px-4 font-medium text-xs uppercase text-gray-500 dark:text-gray-400 cursor-pointer"
+                      className="text-left py-3 px-4 font-semibold text-xs uppercase text-muted-foreground cursor-pointer"
                       onClick={() => {
                         if (sortField === "type") {
                           setSortDirection(sortDirection === "asc" ? "desc" : "asc");
@@ -281,7 +281,7 @@ export default function ExpensesPage() {
                       </div>
                     </th>
                     <th
-                      className="text-left py-3 px-4 font-medium text-xs uppercase text-gray-500 dark:text-gray-400 cursor-pointer"
+                      className="text-left py-3 px-4 font-semibold text-xs uppercase text-muted-foreground cursor-pointer"
                       onClick={() => {
                         if (sortField === "vendor") {
                           setSortDirection(sortDirection === "asc" ? "desc" : "asc");
@@ -298,18 +298,18 @@ export default function ExpensesPage() {
                         )}
                       </div>
                     </th>
-                    <th className="text-left py-3 px-4 font-medium text-xs uppercase text-gray-500 dark:text-gray-400">
+                    <th className="text-left py-3 px-4 font-semibold text-xs uppercase text-muted-foreground">
                       Location
                     </th>
                     {/* Added Comments/Description Column Header */}
-                    <th className="text-left py-3 px-4 font-medium text-xs uppercase text-gray-500 dark:text-gray-400">
+                    <th className="text-left py-3 px-4 font-semibold text-xs uppercase text-muted-foreground">
                       Comments/Desc.
                     </th>
-                    <th className="text-left py-3 px-4 font-medium text-xs uppercase text-gray-500 dark:text-gray-400">
+                    <th className="text-left py-3 px-4 font-semibold text-xs uppercase text-muted-foreground">
                       Trip
                     </th>
                     <th
-                      className="text-right py-3 px-4 font-medium text-xs uppercase text-gray-500 dark:text-gray-400 cursor-pointer"
+                      className="text-right py-3 px-4 font-semibold text-xs uppercase text-muted-foreground cursor-pointer"
                       onClick={() => {
                         if (sortField === "cost") {
                           setSortDirection(sortDirection === "asc" ? "desc" : "asc");
@@ -326,10 +326,10 @@ export default function ExpensesPage() {
                         )}
                       </div>
                     </th>
-                    <th className="text-center py-3 px-4 font-medium text-xs uppercase text-gray-500 dark:text-gray-400">
+                    <th className="text-center py-3 px-4 font-semibold text-xs uppercase text-muted-foreground">
                       Receipt
                     </th>
-                    <th className="text-center py-3 px-4 font-medium text-xs uppercase text-gray-500 dark:text-gray-400">
+                    <th className="text-center py-3 px-4 font-semibold text-xs uppercase text-muted-foreground">
                       Actions
                     </th>
                   </tr>
@@ -337,29 +337,29 @@ export default function ExpensesPage() {
                 <tbody>
                   {filteredExpenses.length > 0 ? (
                     filteredExpenses.map((expense: Expense) => ( // Add Expense type
-                      <tr key={expense.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                        <td className="py-3 px-4">
+                      <tr key={expense.id} className="border-b hover:bg-muted/30"> {/* Use semantic border and hover background */}
+                        <td className="py-3 px-4 text-sm text-foreground"> {/* Adjusted text size and color */}
                           {format(new Date(expense.date), "MMM d, yyyy")}
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-4 text-sm text-foreground"> {/* Adjusted text size and color */}
                           {expense.type}
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-4 text-sm text-foreground"> {/* Adjusted text size and color */}
                           {expense.vendor}
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-4 text-sm text-foreground"> {/* Adjusted text size and color */}
                           {expense.location}
                         </td>
                         {/* Added Comments/Description Column Data */}
-                        <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate" title={expense.comments || ''}>
+                        <td className="py-3 px-4 text-sm text-muted-foreground max-w-xs truncate" title={expense.comments || ''}> {/* Adjusted text color */}
                           {expense.comments || '-'}
                         </td>
                         <td className="py-3 px-4">
-                          <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-primary text-xs rounded-full">
+                          <span className="px-2 py-1 bg-primary/10 text-primary text-xs rounded-full"> {/* Use semantic colors */}
                             {expense.tripName}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-right font-medium">
+                        <td className="py-3 px-4 text-right font-medium text-foreground"> {/* Adjusted text color */}
                           {/* Ensure cost is number before toFixed */}
                           ${(typeof expense.cost === 'number' ? expense.cost : parseFloat(expense.cost)).toFixed(2)}
                         </td>
@@ -368,13 +368,13 @@ export default function ExpensesPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="text-blue-500 hover:text-blue-700"
+                              className="text-primary hover:text-primary/80"
                               onClick={() => openReceiptViewer(`/uploads/${expense.receiptPath}`)}
                             >
                               <EyeIcon className="h-4 w-4" />
                             </Button>
                           ) : (
-                            <span className="text-gray-400 text-sm">None</span>
+                            <span className="text-muted-foreground text-sm">None</span>
                           )}
                         </td>
                         <td className="py-3 px-4 text-center">
@@ -382,7 +382,7 @@ export default function ExpensesPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="text-gray-500 hover:text-primary"
+                              className="text-muted-foreground hover:text-foreground"
                               onClick={() => {
                                 console.log("Edit button clicked for expense ID:", expense.id); // Log click
                                 toggleEditExpense(expense);
@@ -396,7 +396,7 @@ export default function ExpensesPage() {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  className="text-gray-500 hover:text-red-500"
+                                  className="text-muted-foreground hover:text-destructive"
                                 >
                                   <Trash2Icon className="h-4 w-4" />
                                 </Button>
@@ -411,7 +411,7 @@ export default function ExpensesPage() {
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                                   <AlertDialogAction
-                                    className="bg-red-500 hover:bg-red-600"
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                     onClick={() => handleDeleteExpense(expense.id)}
                                   >
                                     Delete
@@ -425,13 +425,13 @@ export default function ExpensesPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={9} className="py-6 text-center text-gray-500 dark:text-gray-400"> {/* Updated colSpan */}
+                      <td colSpan={9} className="py-6 text-center text-muted-foreground">
                         {searchQuery || tripFilter !== "all" ? (
                           <>No expenses match your search criteria</>
                         ) : (
                           <>
                             <div className="flex flex-col items-center justify-center py-4">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-muted-foreground mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 10c0 5-3.5 8.5-7 11.5-3.5-3-7-6.5-7-11.5a7 7 0 1114 0z" />
                               </svg>
                               <p className="mb-4">No expenses have been added yet</p>

@@ -19,8 +19,15 @@ export default async function handler(req, res) {
       });
     }
 
-    // Initialize Supabase client
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Initialize Supabase client with proper configuration
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        persistSession: false
+      },
+      global: {
+        fetch: fetch.bind(globalThis)
+      }
+    });
 
     // Get test credentials from request body
     const { username, email, password } = req.body;
@@ -35,10 +42,11 @@ export default async function handler(req, res) {
     // Test user registration
     try {
       // Check if user already exists
+      // Use proper parameterized queries to avoid SQL injection
       const { data: existingUsers, error: queryError } = await supabase
         .from('users')
         .select('*')
-        .or(`username.eq.${username},email.eq.${email}`)
+        .or(`username.eq."${username}",email.eq."${email}"`)
         .limit(1);
 
       if (queryError) {

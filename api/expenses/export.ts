@@ -156,7 +156,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       throw new Error('Storage configuration is missing');
     }
     
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        persistSession: false
+      },
+      global: {
+        fetch: fetch.bind(globalThis)
+      }
+    });
     
     // Add receipts to the archive
     for (const expense of userExpenses) {

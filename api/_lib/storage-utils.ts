@@ -15,7 +15,15 @@ if (!supabaseUrl || !supabaseServiceKey) {
 
 const supabase = createClient(
   supabaseUrl || '',
-  supabaseServiceKey || ''
+  supabaseServiceKey || '',
+  {
+    auth: {
+      persistSession: false
+    },
+    global: {
+      fetch: fetch.bind(globalThis)
+    }
+  }
 );
 
 // Initialize buckets on startup

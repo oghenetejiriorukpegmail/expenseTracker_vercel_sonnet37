@@ -26,7 +26,29 @@ export class SupabaseStorage implements IStorage {
   private constructor() {
     // Initialize the postgres client
     // Use non-null assertion (!) as the check above ensures databaseUrl is defined here
-    this.client = postgres(databaseUrl!, { max: 1 }); // Use database URL from env, max 1 connection for migrations/setup
+    console.log("Connecting to database using URL:", databaseUrl!.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@'));
+    
+    // Ensure we're connecting to the remote Supabase instance, not localhost
+    if (databaseUrl!.includes('localhost') || databaseUrl!.includes('127.0.0.1')) {
+      console.warn("WARNING: DATABASE_URL appears to be pointing to a local database, not Supabase");
+    }
+    
+    // Configure connection options for Supabase PostgreSQL
+    const connectionOptions = {
+      max: 1,  // Use max 1 connection for migrations/setup
+      connect_timeout: 10, // Add connection timeout
+      ssl: process.env.NODE_ENV === 'production'
+        ? true // Force SSL to be enabled in production
+        : { rejectUnauthorized: false }, // Allow self-signed certificates in development
+    };
+    
+    console.log("Using connection options:", JSON.stringify({
+      ...connectionOptions,
+      ssl: connectionOptions.ssl ? "SSL enabled and forced" : "No SSL"
+    }));
+    
+    this.client = postgres(databaseUrl!, connectionOptions);
+    
     // Initialize Drizzle with the postgres client
     this.db = drizzle(this.client, { schema, logger: false });
   }
@@ -45,10 +67,34 @@ export class SupabaseStorage implements IStorage {
       console.error("FATAL ERROR: Failed to connect to Supabase database during startup.");
       console.error("Error details:", error);
       
+      // Enhanced error logging
+      if (error instanceof Error) {
+        console.error("Error name:", error.name);
+        console.error("Error message:", error.message);
+        console.error("Error stack:", error.stack);
+        
+        // Check for common connection issues
+        if (error.message.includes('connection refused')) {
+          console.error("Connection refused. Please check if the database server is running.");
+        } else if (error.message.includes('password authentication failed')) {
+          console.error("Password authentication failed. Please check your database credentials.");
+        } else if (error.message.includes('database') && error.message.includes('does not exist')) {
+          console.error("Database does not exist. Please check your DATABASE_URL.");
+        } else if (error.message.includes('timeout')) {
+          console.error("Connection timeout. Please check your network or firewall settings.");
+        }
+      }
+      
+      // Log the database URL (with password masked)
+      const dbUrl = process.env.DATABASE_URL || '';
+      const maskedDbUrl = dbUrl.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@');
+      console.error("Database URL (masked):", maskedDbUrl);
+      
       // In development mode, create a mock storage instance instead of exiting
       if (process.env.NODE_ENV !== 'production') {
         console.warn("Running in development mode with mock storage. Database features will be limited.");
-        return createMockStorage();
+        // Cast the mock storage to SupabaseStorage to satisfy TypeScript
+        return createMockStorage() as unknown as SupabaseStorage;
       }
       
       process.exit(1); // Exit the process on connection failure in production
@@ -57,9 +103,11 @@ export class SupabaseStorage implements IStorage {
 
     // Initialize PostgreSQL session store
     const PgStore = connectPgSimple(session);
+    // For the session store, SSL is typically configured in the connection string
+    // The PgStore doesn't accept ssl option directly in its config
     instance.sessionStore = new PgStore({
         conString: databaseUrl, // Use the database connection string from env
-        createTableIfMissing: false, // Explicitly disable table/schema creation
+        createTableIfMissing: false // Explicitly disable table/schema creation
     });
     console.log("PostgreSQL session store initialized.");
 
@@ -402,9 +450,10 @@ export class SupabaseStorage implements IStorage {
 // Create a mock storage instance for development when database is not available
 function createMockStorage(): IStorage {
   // Create a mock session store
+  // For the mock session store, SSL is typically configured in the connection string
   const mockSessionStore = new (connectPgSimple(session))({
     conString: 'postgres://mock:mock@localhost:5432/mock',
-    createTableIfMissing: false,
+    createTableIfMissing: false
   });
   
   // Create a mock storage object
@@ -463,6 +512,7 @@ function createMockStorage(): IStorage {
       return {
         id: 1,
         ...userData,
+        bio: null,
         createdAt: new Date(),
         updatedAt: new Date()
       } as User;
@@ -498,8 +548,8 @@ function createMockStorage(): IStorage {
         updatedAt: new Date()
       };
     },
-    getTripsByUserId: async () => {
-      console.log("Using mock getTripsByUserId");
+    getTripsByUserId: async (userId) => {
+      console.log("Using mock getTripsByUserId", userId);
       return [{
         id: 1,
         userId: 1,
@@ -544,15 +594,15 @@ function createMockStorage(): IStorage {
         type: 'Food',
         vendor: 'Mock Vendor',
         location: 'Mock Location',
-        cost: 100,
+        cost: '100', // Changed to string to match expected type
         comments: 'Mock comments',
         receiptPath: null,
         createdAt: new Date(),
         updatedAt: new Date()
       };
     },
-    getExpensesByUserId: async () => {
-      console.log("Using mock getExpensesByUserId");
+    getExpensesByUserId: async (userId) => {
+      console.log("Using mock getExpensesByUserId", userId);
       return [{
         id: 1,
         userId: 1,
@@ -561,15 +611,15 @@ function createMockStorage(): IStorage {
         type: 'Food',
         vendor: 'Mock Vendor',
         location: 'Mock Location',
-        cost: 100,
+        cost: '100', // Changed to string to match expected type
         comments: 'Mock comments',
         receiptPath: null,
         createdAt: new Date(),
         updatedAt: new Date()
       }];
     },
-    getExpensesByTripName: async () => {
-      console.log("Using mock getExpensesByTripName");
+    getExpensesByTripName: async (userId, tripName) => {
+      console.log("Using mock getExpensesByTripName", userId, tripName);
       return [{
         id: 1,
         userId: 1,
@@ -578,7 +628,7 @@ function createMockStorage(): IStorage {
         type: 'Food',
         vendor: 'Mock Vendor',
         location: 'Mock Location',
-        cost: 100,
+        cost: '100', // Changed to string to match expected type
         comments: 'Mock comments',
         receiptPath: null,
         createdAt: new Date(),
@@ -604,7 +654,7 @@ function createMockStorage(): IStorage {
         type: expenseData.type || 'Food',
         vendor: expenseData.vendor || 'Mock Vendor',
         location: expenseData.location || 'Mock Location',
-        cost: expenseData.cost || 100,
+        cost: expenseData.cost || '100', // Changed to string to match expected type
         comments: expenseData.comments || 'Mock comments',
         receiptPath: expenseData.receiptPath || null,
         createdAt: new Date(),

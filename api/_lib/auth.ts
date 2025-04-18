@@ -10,8 +10,12 @@ import type { User } from './schema';
 
 const scryptAsync = promisify(scrypt);
 
-// JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'expense-tracker-jwt-secret';
+// JWT Secret - ensure it's properly set
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('WARNING: JWT_SECRET environment variable is not set. Using fallback secret.');
+}
+const jwtSecret = JWT_SECRET || 'expense-tracker-jwt-secret';
 const JWT_EXPIRY = '7d'; // Token expires in 7 days
 
 // Password hashing and comparison functions
@@ -30,75 +34,112 @@ export async function comparePasswords(supplied: string, stored: string) {
 
 // JWT token generation
 export function generateToken(user: { id: number; username: string }) {
-  return jwt.sign(
-    {
-      id: user.id,
-      username: user.username
-    },
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRY }
-  );
+  try {
+    return jwt.sign(
+      {
+        id: user.id,
+        username: user.username
+      },
+      jwtSecret,
+      { expiresIn: JWT_EXPIRY }
+    );
+  } catch (error) {
+    console.error('Error generating JWT token:', error);
+    throw new Error('Failed to generate authentication token');
+  }
 }
 
 // JWT token verification
 export function verifyToken(token: string): { id: number; username: string } | null {
+  if (!token) return null;
+  
   try {
-    return jwt.verify(token, JWT_SECRET) as { id: number; username: string };
+    return jwt.verify(token, jwtSecret) as { id: number; username: string };
   } catch (error) {
+    console.error('Error verifying JWT token:', error);
     return null;
   }
 }
 
 // Extract token from request
 export function getTokenFromRequest(req: NextApiRequest | NextRequest): string | null {
-  // For API routes
-  if ('headers' in req) {
-    const authHeader = req.headers.authorization;
-    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-      return authHeader.substring(7);
+  try {
+    // For API routes
+    if ('headers' in req) {
+      // First check Authorization header
+      const authHeader = req.headers['authorization'];
+      if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+        return authHeader.substring(7);
+      }
+      
+      // Then check cookies
+      if (req.cookies) {
+        // Handle both string and object cookie formats
+        if (typeof req.cookies === 'object') {
+          // Direct access for older Next.js versions
+          if ('token' in req.cookies) {
+            return req.cookies.token || null;
+          }
+        }
+      }
     }
     
-    // Also check cookies for token
-    const cookies = req.cookies as { [key: string]: string };
-    return cookies?.token || null;
+    // For middleware (NextRequest)
+    if ('cookies' in req && typeof req.cookies.get === 'function') {
+      const token = req.cookies.get('token');
+      return token?.value || null;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error extracting token from request:', error);
+    return null;
   }
-  
-  // For middleware (NextRequest)
-  if ('cookies' in req && typeof req.cookies.get === 'function') {
-    const token = req.cookies.get('token');
-    return token?.value || null;
-  }
-  
-  return null;
 }
 
 // Authentication middleware for API routes
 export async function authenticateUser(
   req: NextApiRequest
 ): Promise<User | null> {
-  const token = getTokenFromRequest(req);
-  
-  if (!token) {
-    return null;
-  }
-  
-  const decoded = verifyToken(token);
-  if (!decoded) {
-    return null;
-  }
-  
   try {
-    // Get user from database
-    const users_result = await db.select().from(users).where(eq(users.id, decoded.id)).limit(1);
-    const user = users_result[0];
+    const token = getTokenFromRequest(req);
     
-    if (!user) {
+    if (!token) {
+      console.log('Authentication failed: No token found in request');
       return null;
     }
     
-    return user;
+    const decoded = verifyToken(token);
+    if (!decoded) {
+      console.log('Authentication failed: Invalid or expired token');
+      return null;
+    }
+    
+    console.log(`Authenticating user ID: ${decoded.id}, username: ${decoded.username}`);
+    
+    try {
+      // Get user from database
+      const users_result = await db.select().from(users).where(eq(users.id, decoded.id)).limit(1);
+      const user = users_result[0];
+      
+      if (!user) {
+        console.log(`Authentication failed: User ID ${decoded.id} not found in database`);
+        return null;
+      }
+      
+      // Verify username matches token (additional security check)
+      if (user.username !== decoded.username) {
+        console.log(`Authentication failed: Username mismatch for user ID ${decoded.id}`);
+        return null;
+      }
+      
+      return user;
+    } catch (error) {
+      console.error('Database error during user authentication:', error);
+      return null;
+    }
   } catch (error) {
-    console.error('Error authenticating user:', error);
+    console.error('Unexpected error during authentication:', error);
     return null;
   }
 }

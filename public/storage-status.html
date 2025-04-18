@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Storage Status - Expense Tracker</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .status-card {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .status-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .status-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin: 0;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-connected {
+            background-color: #2ecc71;
+        }
+        .status-error {
+            background-color: #e74c3c;
+        }
+        .status-warning {
+            background-color: #f39c12;
+        }
+        .status-detail {
+            background-color: white;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+        .status-detail pre {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+        .refresh-button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.3s;
+        }
+        .refresh-button:hover {
+            background-color: #2980b9;
+        }
+        .timestamp {
+            font-size: 0.8rem;
+            color: #7f8c8d;
+            text-align: right;
+            margin-top: 20px;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-style: italic;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+    <h1>Storage Status</h1>
+    
+    <div id="status-container">
+        <div class="loading">Loading storage status information...</div>
+    </div>
+    
+    <button id="refresh-button" class="refresh-button">Refresh Status</button>
+    
+    <div id="timestamp" class="timestamp"></div>
+
+    <script>
+        // Function to fetch storage status
+        async function fetchStorageStatus() {
+            try {
+                document.getElementById('status-container').innerHTML = '<div class="loading">Loading storage status information...</div>';
+                
+                const response = await fetch('/api/system/storage-status');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                displayStorageStatus(data);
+            } catch (error) {
+                console.error('Error fetching storage status:', error);
+                document.getElementById('status-container').innerHTML = `
+                    <div class="status-card">
+                        <div class="status-header">
+                            <h2 class="status-title"><span class="status-indicator status-error"></span>Error</h2>
+                        </div>
+                        <div class="status-detail">
+                            <pre>Failed to fetch storage status: ${error.message}</pre>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        // Function to display storage status
+        function displayStorageStatus(data) {
+            const container = document.getElementById('status-container');
+            const timestamp = document.getElementById('timestamp');
+            
+            // Determine connection status indicator
+            const dbStatusClass = data.databaseConnectionStatus === 'Connected' 
+                ? 'status-connected' 
+                : (data.databaseConnectionStatus === 'Not connected (using mock storage)' ? 'status-warning' : 'status-error');
+            
+            // Determine storage implementation indicator
+            const storageStatusClass = data.storageImplementation === 'Supabase Storage' 
+                ? 'status-connected' 
+                : 'status-warning';
+            
+            // Format the HTML
+            container.innerHTML = `
+                <div class="status-card">
+                    <div class="status-header">
+                        <h2 class="status-title"><span class="status-indicator ${storageStatusClass}"></span>Storage Implementation</h2>
+                    </div>
+                    <div class="status-detail">
+                        <pre>${data.storageImplementation}</pre>
+                    </div>
+                </div>
+                
+                <div class="status-card">
+                    <div class="status-header">
+                        <h2 class="status-title"><span class="status-indicator ${dbStatusClass}"></span>Database Connection Status</h2>
+                    </div>
+                    <div class="status-detail">
+                        <pre>${data.databaseConnectionStatus}</pre>
+                    </div>
+                </div>
+                
+                <div class="status-card">
+                    <div class="status-header">
+                        <h2 class="status-title">Database Information</h2>
+                    </div>
+                    <div class="status-detail">
+                        <pre>${JSON.stringify(data.databaseInfo, null, 2)}</pre>
+                    </div>
+                </div>
+            `;
+            
+            // Update timestamp
+            if (data.timestamp) {
+                const date = new Date(data.timestamp);
+                timestamp.textContent = `Last updated: ${date.toLocaleString()}`;
+            }
+        }
+        
+        // Add event listener to refresh button
+        document.getElementById('refresh-button').addEventListener('click', fetchStorageStatus);
+        
+        // Fetch storage status on page load
+        document.addEventListener('DOMContentLoaded', fetchStorageStatus);
+    </script>
+</body>
+</html>

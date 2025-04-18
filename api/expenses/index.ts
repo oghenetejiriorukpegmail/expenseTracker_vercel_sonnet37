@@ -31,8 +31,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Expenses error:', error);
     return res.status(500).json({ message: 'Internal server error' });
   } finally {
-    // Close database connection in production
-    await closeConnection();
+    // Close database connection in production, passing the request object
+    await closeConnection(req);
   }
 }
 

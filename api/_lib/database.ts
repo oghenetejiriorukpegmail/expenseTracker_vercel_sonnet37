@@ -31,7 +31,8 @@ try {
       max: 1, // Single connection for serverless functions
       idle_timeout: 20, // Close idle connections after 20 seconds
       connect_timeout: 10, // Connection timeout after 10 seconds
-      debug: false // Disable debug logging in production
+      debug: false, // Disable debug logging in production
+      ssl: true, // Force SSL to be enabled
     });
   } else {
     // In development, we'll reuse the connection
@@ -40,7 +41,8 @@ try {
       global.cachedConnection = postgres(process.env.DATABASE_URL!, {
         max: 5, // More connections for development
         idle_timeout: 30,
-        debug: true // Enable debug logging in development
+        debug: true, // Enable debug logging in development
+        ssl: true, // Force SSL to be enabled
       });
     }
     conn = global.cachedConnection;
@@ -62,7 +64,9 @@ try {
     process.exit(1); // Exit in production if connection initialization fails
   }
   // In development, create a dummy connection that will throw errors when used
-  conn = postgres('postgres://invalid:invalid@localhost:5432/invalid');
+  conn = postgres('postgres://invalid:invalid@localhost:5432/invalid', {
+    ssl: true // Force SSL to be enabled
+  });
 }
 
 // Initialize Drizzle with the postgres client
@@ -72,13 +76,24 @@ export const db = drizzle(conn, { schema });
 export const sql = conn;
 
 // Helper function to close the connection (useful for serverless functions)
-export const closeConnection = async () => {
-  if (process.env.NODE_ENV === 'production') {
+export const closeConnection = async (req?: any) => {
+  // Check if we should prevent auto-closing (set by dbConnectionMiddleware)
+  if (req && req.__preventAutoConnectionClose) {
+    console.log('Skipping database connection close due to middleware flag');
+    return;
+  }
+
+  // Only close connections in production environment and only for non-cached connections
+  if (process.env.NODE_ENV === 'production' && conn !== global.cachedConnection) {
     try {
+      console.log('Closing database connection in production environment');
       await conn.end();
       console.log('Database connection closed');
     } catch (error) {
       console.error('Error closing database connection:', error);
     }
+  } else {
+    // In development, we keep the connection open
+    console.log('Keeping database connection open in development environment');
   }
 };

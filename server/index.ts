@@ -1,10 +1,15 @@
 import 'dotenv/config'; // Load environment variables FIRST
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet"; // Import helmet
+import cors from "cors"; // Import cors
+import cookieParser from "cookie-parser"; // Import cookie-parser
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { storage as storagePromise } from "./storage"; // Import the promise
 import { setupAuth } from "./auth"; // Import setupAuth
+import { jsonResponseMiddleware } from "./middleware/json-response"; // Import JSON response middleware
+import { authRedirectMiddleware } from "./middleware/auth-redirect"; // Import auth redirect middleware
+import { dbConnectionMiddleware } from "./middleware/db-connection"; // Import DB connection middleware
 import { initializeEnvFromConfig } from "./config"; // Import config initialization
 import path from "path";
 import fs from "fs";
@@ -64,9 +69,29 @@ if (process.env.NODE_ENV === 'production') {
   }));
 }
 
+// CORS middleware
+app.use(cors({
+  origin: true, // Allow all origins in development
+  credentials: true, // Allow cookies to be sent with requests
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
+}));
+
+// Add cookie parser middleware
+app.use(cookieParser());
+
 // Body parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Add auth redirect middleware to handle routing conflicts
+app.use(authRedirectMiddleware);
+
+// Add JSON response middleware to ensure auth endpoints return JSON
+app.use(jsonResponseMiddleware);
+
+// Add database connection middleware to prevent premature connection closing
+app.use(dbConnectionMiddleware);
 
 // Request logging middleware
 app.use((req, res, next) => {

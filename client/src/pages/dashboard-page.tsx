@@ -90,12 +90,12 @@ export default function DashboardPage() {
 
         {/* Dashboard Title and Buttons/Welcome Message */}
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold mb-2 md:mb-0">Dashboard Overview</h1>
+          <h1 className="text-2xl font-bold mb-4 md:mb-0">Dashboard Overview</h1> {/* Increased bottom margin on small screens */}
 
           {/* Container for Welcome Message and Button */}
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-4"> {/* Adjusted alignment on small screens */}
              {/* Add Welcome Message here with matching style */}
-             <h1 className="text-2xl font-bold">{welcomeMessage}</h1>
+             <h1 className="text-xl md:text-2xl font-bold">{welcomeMessage}</h1> {/* Adjusted font size on small screens */}
              {/* Add Trip Button */}
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={toggleAddTrip}>
               <PlusIcon className="h-4 w-4 mr-2" /> Add Trip

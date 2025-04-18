@@ -113,15 +113,12 @@ Create an `app-config.json` file in the root directory:
    npm install
    ```
 
-2. Start the development server:
+2. Start the development server (both Next.js frontend and Express backend):
    ```
    npm run dev
    ```
 
-3. In a separate terminal, start the Express server:
-   ```
-   npm run start:server
-   ```
+This single command starts both the Next.js frontend and Express backend servers concurrently, providing a development environment that matches the production setup.
 
 ## Testing OCR with Sample Receipt
 
